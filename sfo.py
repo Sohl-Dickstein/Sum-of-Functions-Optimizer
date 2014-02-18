@@ -1,60 +1,5 @@
 """
-Below is simple example code.  If the optimizer doesn't work as desired, take the following
-steps.
- - If too much time is spent inside SFO, relative to inside the objective function, then reduce 
-the number of subfunctions, eg by increasing minibatch size.
- - Email jascha@stanford.edu with a question
-
-Example code:
-
-from numpy import *
-from numpy.random import randn
-from sfo import SFO
-
-# define an objective function and gradient
-def f_df(theta, v):
-    # Calculate reconstruction error and gradient for an autoencoder with sigmoid
-    # nonlinearity.  This is the objective function and gradient for each subfunction.
-    # v contains the training data, and will be different for each subfunction.
-    h = 1./(1. + exp(-(dot(theta['W'], v) + theta['b_h'])))
-    v_hat = dot(theta['W'].T, h) + theta['b_v']
-    f = sum((v_hat - v)**2) / v.shape[1]
-    dv_hat = 2.*(v_hat - v) / v.shape[1]
-    db_v = sum(dv_hat, axis=1).reshape((-1,1))
-    dW = dot(h, dv_hat.T)
-    dh = dot(theta['W'], dv_hat)
-    db_h = sum(dh*h*(1.-h), axis=1).reshape((-1,1))
-    dW += dot(dh*h*(1.-h), v.T)
-    dfdtheta = {'W':dW, 'b_h':db_h, 'b_v':db_v}
-    return f, dfdtheta
-
-# set model and training data parameters
-M = 20 # number visible units
-J = 10 # number hidden units
-D = 100000 # full data batch size
-N = int(sqrt(D)/10.) # number minibatches
-# generate random training data
-v = randn(M,D)
-
-# create the array of subfunction specific arguments
-sub_refs = []
-for i in range(N):
-    # extract a single minibatch of training data.
-    sub_refs.append(v[:,i::N])
-
-# initialize parameters
-theta_init = {'W':randn(J,M), 'b_h':randn(J,1), 'b_v':randn(M,1)}
-# initialize the optimizer
-optimizer = SFO(f_df, theta_init, sub_refs)
-# run the optimizer for 1 pass through the data
-theta = optimizer.optimize(num_passes=1)
-# continue running the optimizer for another 50 passes through the data
-theta = optimizer.optimize(num_passes=50)
-# test the gradient of f_df
-optimizer.check_grad()
-
 Author: Jascha Sohl-Dickstein (2014)
-Web: http://redwood.berkeley.edu/jascha
 This software is made available under the Creative Commons
 Attribution-Noncommercial License.
 ( http://creativecommons.org/licenses/by-nc/3.0/ )
@@ -69,18 +14,12 @@ import time
 import warnings
 
 class SFO(object):
-    """
-    The main Sum of Functions Optimizer (SFO) class.
-    See code at top of sfo.py for example usage.
-    """
-
     def __init__(self, f_df, theta, subfunction_references, args=(), kwargs={},
         display=1, max_history_terms=10, max_gradient_noise=1.,
         hessian_init=1e6, init_subf=2, hess_max_dev = 1e8,
         hessian_algorithm='bfgs', subfunction_selection='distance'):
         """
         The main Sum of Functions Optimizer (SFO) class.
-        See code at top of sfo.py for example usage.
 
         Parameters:
         f_df - Returns the function value and gradient for a single subfunction 
@@ -121,6 +60,8 @@ class SFO(object):
         subfunction_selection='distance' - The algorithm to use to choose the
             next subfunction to evaluated.  This can be maximum distance
             ('distance'), random ('random'), or cyclic ('cyclic').
+
+        See README.md for example code.
         """
 
         self.display = display
