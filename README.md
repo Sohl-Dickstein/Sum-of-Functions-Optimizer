@@ -3,29 +3,37 @@ Sum of Functions Optimizer (SFO)
 
 This code implements the optimization algorithm, and reproduces the figures, contained in the paper    
 ```citation
-Sohl-Dickstein, Jascha, Ben Poole, and Surya Ganguli
+Jascha Sohl-Dickstein, Ben Poole, and Surya Ganguli
 An adaptive low dimensional quasi-Newton sum of functions optimizer
 arXiv preprint arXiv:1311.2115 (2013)
 http://arxiv.org/abs/1311.2115
 ```
 
 ## Use SFO
-To use SFO, you should first import SFO,
-```python
-from sfo import SFO
-```
-then initialize it, passing in your objective function and gradient, initial parameters, and an array of objects which will be passed into the objective function, with each entry in the array corresponding to a single subfunction or minibatch,    
-```python
-optimizer = SFO(f_df, theta_init, subfunction_references)
-```
-finally you should call the optimizer, specifying the number of optimization passes to perform,    
-```python
-theta = optimizer.optimize(num_passes=1)
-```
+To use SFO, you should first import SFO,  
+`from sfo import SFO`  
+then initialize it,    
+`optimizer = SFO(f_df, theta_init, subfunction_references)`    
+then call the optimizer, specifying the number of optimization passes to perform,    
+`theta = optimizer.optimize(num_passes=1)`.
 
-Simple example code training an autoencoder is included at the end of this readme.  More detailed information can be found in the documentation in **sfo.py**.
+The three required parameters for initialization are:    
+- *f_df* - Returns the function value and gradient for a single subfunction
+            call.  Should have the form
+                `[f, dfdtheta] = f_df(theta, subfunction_references[idx])`,
+            where `idx` is the index of a single subfunction.    
+- *theta_init* - The initial parameters to be used for optimization.  *theta_init* can
+            be either a NumPy array, an array of NumPy arrays, or a dictionary
+            of NumPy arrays.  The gradient returned by *f_df* should have the
+            same form as *theta_init*.    
+- *subfunction_references* - A list containing an identifying element for
+            each subfunction.  The elements in this list could be, eg, numpy
+            matrices containing minibatches, or indices identifying the
+            subfunction, or filenames from which target data should be read.
 
-## Reproduce figures from paper
+More detailed documentation, and additional options, can be found in the documentation in **sfo.py**.  If too much time is spent inside SFO, relative to inside the objective function, then reduce the number of subfunctions by increasing the minibatch size or merging subfunctions.  Simple example code training an autoencoder is included at the end of this readme.  Email jascha@stanford.edu with any remaining questions.
+
+## Reproduce figures from the paper
 To reproduce the figures from the paper, run **figure\_cartoon.py**, **figure\_overhead.py**, or **figure\_convergence.py**.  **figure\_overhead.py** and **figure\_convergence.py** both require a subdirectory **figure_data/** which contains training data, and is too large to commit to this GitHub repository.  This will be available for download shortly -- URL to follow.
 
 
