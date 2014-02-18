@@ -50,7 +50,7 @@ from sfo import SFO
 def f_df(theta, v):
     """
     Calculate reconstruction error and gradient for an autoencoder with sigmoid
-    nonlinearity.  This is the objective function and gradient for each subfunction.
+    nonlinearity.
     v contains the training data, and will be different for each subfunction.
     """
     h = 1./(1. + exp(-(dot(theta['W'], v) + theta['b_h'])))
