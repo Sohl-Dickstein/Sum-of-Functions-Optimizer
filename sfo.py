@@ -75,7 +75,7 @@ class SFO(object):
     """
 
     def __init__(self, f_df, theta, subfunction_references, args=(), kwargs={},
-        display=5, max_history_terms=10, max_gradient_noise=1.,
+        display=1, max_history_terms=10, max_gradient_noise=1.,
         hessian_init=1e6, init_subf=2, hess_max_dev = 1e8,
         hessian_algorithm='bfgs', subfunction_selection='distance'):
         """
@@ -88,6 +88,10 @@ class SFO(object):
                 [f, dfdtheta] = f_df(theta, subfunction_references[idx],
                                       *args, **kwargs)
             where idx is the index of a single subfunction.
+        theta - The initial parameters to be used for optimization.  theta can
+            be either a NumPy array, an array of NumPy arrays, or a dictionary
+            of NumPy arrays.  The gradient returned by f_df should have the
+            same form as theta.
         subfunction_references - A list containing an identifying element for
             each subfunction.  The elements in this list could be, eg, numpy
             matrices containing minibatches, or indices identifying the
