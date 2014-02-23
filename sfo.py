@@ -15,7 +15,7 @@ import warnings
 
 class SFO(object):
     def __init__(self, f_df, theta, subfunction_references, args=(), kwargs={},
-        display=1, max_history_terms=10, max_gradient_noise=1.,
+        display=2, max_history_terms=10, max_gradient_noise=1.,
         hessian_init=1e6, init_subf=2, hess_max_dev = 1e8,
         hessian_algorithm='bfgs', subfunction_selection='distance'):
         """
