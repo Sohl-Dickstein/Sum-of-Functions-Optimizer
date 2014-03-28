@@ -45,12 +45,12 @@ class figures_train:
 
     This is WAY SLOWER than just calling the optimizers, because
     it evaluates the FULL objective and gradient instead of a single
-    subfunction at every update step.
+    subfunction several times per pass.
 
     Designed to be used by figure_convergence.py.
     """
 
-    def __init__(self, model, calculate_full_objective=True, num_projection_dims=5):
+    def __init__(self, model, calculate_full_objective=True, num_projection_dims=5, full_objective_per_pass=4):
         """
         Trains the model using a variety of optimization algorithms.
         This class also wraps the objective and gradient of the model,
@@ -59,7 +59,7 @@ class figures_train:
 
         This is WAY SLOWER than just calling the optimizers, because
         it evaluates the FULL objective and gradient instead of a single
-        subfunction at every update step.
+        subfunction several times per pass.
 
         Designed to be used by figure_convergence.py.
         """
@@ -76,7 +76,7 @@ class figures_train:
         self.x_projection_matrix = np.random.randn(num_projection_dims, M)/np.sqrt(M)
 
         self.num_subfunctions = len(self.model.subfunction_references)
-        self.full_objective_period = int(self.num_subfunctions/4)
+        self.full_objective_period = int(self.num_subfunctions/full_objective_per_pass)
 
     def f_df_wrapper(self, *args, **kwargs):
         """
@@ -155,9 +155,9 @@ class figures_train:
             args=(self.model.subfunction_references, ),
             maxfun=num_passes)
 
-    def SFO(self, num_passes=20):
+    def SFO(self, num_passes=20, learner_name='SFO'):
         """ Train model using SFO."""
-        self.learner_name = 'SFO'
+        self.learner_name = learner_name
         print("\n\n" + self.learner_name)
 
         self.optimizer = SFO(self.f_df_wrapper, self.model.theta_init, self.model.subfunction_references)

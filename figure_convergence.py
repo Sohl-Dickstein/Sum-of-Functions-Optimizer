@@ -76,7 +76,9 @@ def best_traces(prop, hist_f, styledict, color, neighbor_dist = 1):
                 print("failure around", prop[-1])
         styledict[prop[ii]] = {'color':color, 'ls':'-', 'linewidth':4}
 
-def make_plot_single_model(hist_f, hist_x_projection, hist_events, model_name, num_subfunctions, full_objective_period, display_events=False, display_trajectory=False, figsize=(4.5,3.5), external_legend=True, name_prefix=""):
+def make_plot_single_model(hist_f, hist_x_projection, hist_events, model_name,
+    num_subfunctions, full_objective_period, display_events=False,
+    display_trajectory=False, figsize=(4.5,3.5), external_legend=True, name_prefix=""):
     """
     Plot the different optimizers against each other for a single
     model.
@@ -100,6 +102,9 @@ def make_plot_single_model(hist_f, hist_x_projection, hist_events, model_name, n
         title = 'Sum of Norms'
     elif model_name == 'Pylearn_conv':
         title = 'Convolutional Network, CIFAR-10'
+    elif model_name == 'GLM':
+        title = 'GLM, soft rectifying nonlinearity'
+        model_name = 'GLM_soft'
 
     # set up linestyle cycler
     styles = [
@@ -121,6 +126,11 @@ def make_plot_single_model(hist_f, hist_x_projection, hist_events, model_name, n
     ]
     stylecycler = cycle(styles)
     styledict = defaultdict(lambda: next(stylecycler))
+
+    zorder = dict()
+    sorted_nm = sorted(hist_f.keys(), key=lambda nm: np.asarray(hist_f[nm])[-1], reverse=True)
+    for ii, nm in enumerate(sorted_nm):
+        zorder[nm] = ii
 
     ## override the default cycled styles for specific optimizers
     # LBFGS
@@ -145,10 +155,12 @@ def make_plot_single_model(hist_f, hist_x_projection, hist_events, model_name, n
     prop = [nm for nm in hist_f.keys() if nm == 'SFO' or nm == 'SFO standard']
     for nm in prop:
         styledict[nm] = {'color':'k', 'ls':'-', 'linewidth':4}
-
-    zorder = dict()
-    sorted_nm = sorted(hist_f.keys(), key=lambda nm: np.asarray(hist_f[nm])[-1], reverse=True)
-    for ii, nm in enumerate(sorted_nm):
+    # SFO number minibatches
+    prop = [nm for nm in hist_f.keys() if 'SFO' in nm and 'N=' in nm]
+    nprop = len(prop)
+    for ii, nm in enumerate(sorted_nicely(prop)):
+        #styledict[nm] = {'color':'k', 'dashes':(7,nprop/(ii+1.),), 'linewidth':5.*(ii+1.)/nprop}
+        styledict[nm] = {'color':(1. - ii/(nprop-1.), 0., 0.), 'ls':'-', 'linewidth':4.*(ii+1.)/nprop}
         zorder[nm] = ii
 
     # plot the learning trace, and save pdf
@@ -365,7 +377,10 @@ def load_results(fnames=None, base_fname='figure_data_'):
             num_subfunctions = data['num_subfunctions']
             full_objective_period = data['full_objective_period']
         if not (num_subfunctions == data['num_subfunctions'] and full_objective_period == data['full_objective_period']):
-            throw("cannot mix data with different numbers of subfunctions or delays between evaluating full objective")
+            print "****************"
+            print "WARNING: mixing data with different numbers of subfunctions or delays between evaluating the full objective"
+            print "make sure you are doing this intentionally (eg, for the convergence vs., number subfunctions plot)"
+            print "****************"
         model_name = data['model_name'].tostring()
         print("loading", model_name)
         if not model_name in history_nested:
@@ -379,20 +394,70 @@ def load_results(fnames=None, base_fname='figure_data_'):
 
     return history_nested, num_subfunctions, full_objective_period
 
-def save_results(trainer, base_fname='figure_data_'):
+def save_results(trainer, base_fname='figure_data_', store_x=True):
     """
     Save the function trace for different optimizers for a 
     given model to a .npz file.
     """
+    if not store_x:
+        # delete the saved final x value so we don't run out of memory
+        trainer.history['x'] = defaultdict(list)
 
     fname = base_fname + trainer.model.name + ".npz"
-    np.savez(fname, history=trainer.history, model_name=trainer.model.name, num_subfunctions = trainer.num_subfunctions, full_objective_period=trainer.full_objective_period)
+    np.savez(fname, history=trainer.history, model_name=trainer.model.name,
+        num_subfunctions = trainer.num_subfunctions,
+        full_objective_period=trainer.full_objective_period)
 
 
-def generate_data_SFO_variations(num_passes=20, base_fname='figure_data_', store_x=True):
+def generate_data_SFO_N(num_passes=20, base_fname='num_minibatches', store_x=True):
+    """
+    Same as generate_data(), but compares SFO with different numbers of minibatches
+    rather than SFO to other optimizers.
+    """
+    models_to_train = ( figures_models.logistic, figures_models.Hopfield )
+    models_to_train = ( figures_models.logistic, ) # DEBUG
+
+    # the different numbers of minibatches to experiment with
+    N_set = np.round(np.logspace(0, np.log10(200), 6)).astype(int)
+    #N_set = np.round(np.logspace(0, 2, 3)).astype(int)
+
+    for model_class in models_to_train:
+        # # first do LBFGS
+        # np.random.seed(0) # make experiments repeatable
+        # model = model_class(scale_by_N=False)
+        # trainer = figures_train.figures_train(model, full_objective_per_pass=1)
+        # optimizer = trainer.LBFGS
+        # print("\n\n\n" + model.name + "\n" + str(optimizer))
+        # optimizer(num_passes=num_passes)
+        # save_results(trainer, base_fname=base_fname, store_x=store_x)
+
+        # then do SFO with different minibatch sizes
+        for N in N_set:
+            np.random.seed(0) # make experiments repeatable
+            model = model_class(num_subfunctions=N, scale_by_N=False)
+            trainer = figures_train.figures_train(model, full_objective_per_pass=1)
+            optimizer = trainer.SFO
+            np.random.seed(0) # make experiments exactly repeatable
+            print("\n\n\n" + model.name + "\n" + str(optimizer))
+            optimizer(num_passes=num_passes, learner_name='SFO $N=%d$'%(N))
+            save_results(trainer, base_fname=(base_fname+'_N=%d'%(N)), store_x=store_x)
+
+
+def train_and_plot_SFO_N(num_passes=51, base_fname='num_minibatches'):
+    """
+    Same as train_and_plot(), but compares SFO with different numbers of minibatches
+    rather than SFO to other optimizers.
+    """
+    base_fname += "_%s_"%(datetime.datetime.now().strftime("%Y%m%d-%H%M%S"))
+    generate_data_SFO_N(num_passes=num_passes, base_fname=base_fname)
+    history_nested, num_subfunctions, full_objective_period = load_results(base_fname=base_fname)
+    make_plots(history_nested, num_subfunctions, full_objective_period, name_prefix='num_minibatches_')
+
+
+def generate_data_SFO_variations(num_passes=20, base_fname='convergence_variations', store_x=True):
     """
     Same as generate_data(), but compares different variations of SFO to each
-    other, rather than SFO to other optimizers.    
+    other, rather than SFO to other optimizers.
     """
     models_to_train = ( figures_models.logistic, figures_models.Hopfield )
     models_to_train = ( figures_models.logistic, ) #DEBUG
@@ -401,21 +466,17 @@ def generate_data_SFO_variations(num_passes=20, base_fname='figure_data_', store
         np.random.seed(0) # make experiments repeatable
         model = model_class()
         trainer = figures_train.figures_train(model)
-        optimizers_to_use = [trainer.SFO_variations,] # DEBUG
+        optimizers_to_use = [trainer.SFO_variations,]
         for optimizer in optimizers_to_use:
             np.random.seed(0) # make experiments exactly repeatable
             print("\n\n\n" + model.name + "\n" + str(optimizer))
             optimizer(num_passes=num_passes)
-
-            if not store_x:
-                # delete the saved final x value so we don't run out of memory
-                trainer.history['x'] = defaultdict(list)
-
             # save_results doesn't need to be called until outside this loop,
             # but this way we can peak at partial results
             # also, note that saved files for the same model but different optimizers
             # can be combined in plots, just by calling load_results with all the saved files
-            save_results(trainer, base_fname=base_fname)
+            save_results(trainer, base_fname=base_fname, store_x=store_x)
+
 
 def train_and_plot_SFO_variations(num_passes=51, base_fname='convergence_variations'):
     """
@@ -463,16 +524,11 @@ def generate_data(num_passes=20, base_fname='figure_data_', store_x=True):
             np.random.seed(0) # make experiments exactly repeatable
             print("\n\n\n" + model.name + "\n" + str(optimizer))
             optimizer(num_passes=num_passes)
-
-            if not store_x:
-                # delete the saved final x value so we don't run out of memory
-                trainer.history['x'] = defaultdict(list)
-
             # save_results doesn't need to be called until outside this loop,
             # but this way we can peak at partial results
             # also, note that saved files for the same model but different optimizers
             # can be combined in plots, just by calling load_results with all the saved files
-            save_results(trainer, base_fname=base_fname)
+            save_results(trainer, base_fname=base_fname, store_x=store_x)
 
 
 def train_and_plot(num_passes=51, base_fname='convergence'):
@@ -488,10 +544,15 @@ def train_and_plot(num_passes=51, base_fname='convergence'):
     history_nested, num_subfunctions, full_objective_period = load_results(base_fname=base_fname)
     make_plots(history_nested, num_subfunctions, full_objective_period)
 
+
 if __name__ == '__main__':
     # compare convergence for different optimizers
     train_and_plot()
+    print "plots saved for optimizer comparison"
     # compare convergence for different variations on SFO
     train_and_plot_SFO_variations()
-    plt.show()
-
+    print "plots saved for variations on SFO algorithm comparison"
+    # compare convergence for different numbers of subfunctions
+    train_and_plot_SFO_N()
+    print "plots saved for number of minibatches comparison"
+    #plt.show()

@@ -19,6 +19,7 @@ import scipy.special
 import warnings
 import random
 from figures_cae import CAE
+from os.path import join
 
 try:
     import pyGLM.simGLM as glm
@@ -37,17 +38,16 @@ else:
 
 
 class Hopfield:
-    """
-    Train a Hopfield network/Ising model using MPF.
+    def __init__(self, num_subfunctions=100, reg=1., scale_by_N=True):
+        """
+        Train a Hopfield network/Ising model using MPF.
 
-    Adapted from code by Chris Hillar, Kilian Koepsell, 2011
+        Adapted from code by Chris Hillar, Kilian Koepsell, Jascha Sohl-Dickstein, 2011
 
-    TODO insert Hopfield and MPF references.
-    """
-
-    def __init__(self, num_subfunctions=100, reg=1e-2):
+        TODO insert Hopfield and MPF references.
+        """
         self.name = 'Hopfield'
-        self.reg = reg
+        self.reg = reg/num_subfunctions
 
         # Load data
         X, _ = load_mnist()
@@ -67,6 +67,11 @@ class Hopfield:
         #self.full_objective_references = (X[:, random_choice(X.shape[1], 10000, replace=False)].copy().T,)
         self.full_objective_references = self.subfunction_references
 
+        if scale_by_N:
+            self.scl = float(num_subfunctions) / float(X.shape[1])
+        else:
+            self.scl = 100. / float(X.shape[1])
+
         # parameter initialization
         self.theta_init = np.random.randn(X.shape[0], X.shape[0])/np.sqrt(X.shape[0])/10.
         self.theta_init = (self.theta_init + self.theta_init.T)/2.
@@ -75,7 +80,6 @@ class Hopfield:
     def f_df(self, J, X):
         J = (J + J.T)/2.
         X = np.atleast_2d(X)
-        M, N = X.shape
         S = 2 * X - 1
         Kfull = np.exp(-S * np.dot(X, J.T) + .5 * np.diag(J)[None, :])
         dJ = -np.dot(X.T, Kfull * S) + .5 * np.diag(Kfull.sum(0))
@@ -86,8 +90,8 @@ class Hopfield:
         if not np.isfinite(K):
             K = 1e50
 
-        K /= M
-        dJ /= M
+        K *= self.scl
+        dJ *= self.scl
 
         K += self.reg * np.sum(J**2)
         dJ += 2. * self.reg * J
@@ -99,7 +103,7 @@ class logistic:
     logistic regression on "protein" dataset
     """
 
-    def __init__(self, num_subfunctions=100):
+    def __init__(self, num_subfunctions=100, scale_by_N=True):
         self.name = 'protein logistic regression'
 
         try:
@@ -115,17 +119,25 @@ class logistic:
         # create the array of subfunction identifiers
         self.subfunction_references = []
         N = num_subfunctions
-        nper = np.floor(feat.shape[0]/N)
-        lam = 1./nper**2
-        scl = 1./nper
+        nper = float(feat.shape[0])/float(N)
+        if scale_by_N:
+            lam = 1./nper**2
+            scl = 1./nper
+        else:
+            default_N = 100.
+            nnp = float(feat.shape[0])/default_N
+            lam = (1./nnp**2) * (default_N / float(N))
+            scl = 1./nnp
         for i in range(N):
-            i_s = i*nper
-            i_f = (i+1)*nper
+            i_s = int(np.floor(i*nper))
+            i_f = int(np.floor((i+1)*nper))
+            if i == N-1:
+                # don't drop any at the end
+                i_f = target.shape[0]
             l_targ = target[i_s:i_f,:]
             l_feat = feat[i_s:i_f,:]
             self.subfunction_references.append([l_targ, l_feat, lam, scl, i])
         self.full_objective_references = self.subfunction_references
-
 
         self.theta_init = np.random.randn(feat.shape[1],1)/np.sqrt(feat.shape[1])/10. # parameters initialization
 
@@ -455,37 +467,57 @@ class GLM:
     Train a GLM on simulated data.
     """
 
-    def __init__(self, num_subfunctions_ratio=0.05):
+    def __init__(self, num_subfunctions_ratio=0.05, baseDir='/home/nirum/data/retina/glm-feb-19/'):
+    #def __init__(self, num_subfunctions_ratio=0.05, baseDir='/home/nirum/data/retina/glm-feb-19/small'):
         self.name = 'GLM'
 
         print('Initializing parameters...')
+
+        ## FOR CUSTOM SIZES
         #self.params = glm.setParameters(m=5000, dh=10, ds=50) # small
-        self.params = glm.setParameters(m=5000, dh=10, ds=49) # small
+        #self.params = glm.setParameters(m=5000, dh=10, ds=49) # small
         #self.params = glm.setParameters(m=20000, dh=100, ds=500) # large
         #self.params = glm.setParameters(m=20000, dh=25, ds=256, n=5) # huge
         #self.params = glm.setParameters(m=1e5, dh=10, ds=256, n=50) # Jascha huge
         #self.params = glm.setParameters(m=1e5, n=100, ds=256, dh=10) # shared
 
+        ## FROM EXTERNAL DATA FILES
+        # load sizes of external data
+        shapes = np.load(join(baseDir, 'metadata.npz'))
+
+        # set up GLM parameters
+        self.params = glm.setParameters(dh=40, ds=shapes['stimSlicedShape'][1], n=shapes['rateShape'][1])
+        #self.params = glm.setParameters(dh=40, ds=shapes['stimSlicedShape'][1], n=2)
+
         ## initialize parameters
         print('Generating model...')
-        self.theta_true = glm.generateModel(self.params)
+        #self.theta_true = glm.generateModel(self.params)
         self.theta_init = glm.generateModel(self.params)
         for key in self.theta_init.keys():
             self.theta_init[key] /= 1e3
 
-        print('Simulating model to generate data...')
-        self.data = glm.generateData(self.theta_true, self.params)
+        #print('Simulating model to generate data...')
+        #self.data = glm.generateData(self.theta_true, self.params)
+
+        # load external data files as memmapped arrays
+        print('Loading external data...')
+        self.data = glm.loadExternalData('stimulus_sliced.dat', 'rates.dat', shapes, baseDir=baseDir)
+
+        # all the data
         batch_size = self.data['x'].shape[0]
+        #batch_size = 10000
 
-        trueMinimum, trueGrad = self.f_df(self.theta_true, (0, batch_size))
-        print('Minimum for true parameters %g'%(trueMinimum))
+        print('ready to go!')
 
-        print('Norm of the gradient at the minimum:')
-        for key in trueGrad.keys():
-            print('grad[' + key + ']: %g'%(np.linalg.norm(trueGrad[key])))
+        #trueMinimum, trueGrad = self.f_df(self.theta_true, (0, batch_size))
+        #print('Minimum for true parameters %g'%(trueMinimum))
+
+        #print('Norm of the gradient at the minimum:')
+        #for key in trueGrad.keys():
+            #print('grad[' + key + ']: %g'%(np.linalg.norm(trueGrad[key])))
 
         # print out some network information
-        glm.visualizeNetwork(self.theta_true, self.params, self.data)
+        #glm.visualizeNetwork(self.theta_true, self.params, self.data)
 
         # break the data up into minibatches
 
@@ -493,11 +525,13 @@ class GLM:
         self.subfunction_references = []
         samples_per_subfunction = int(np.floor(batch_size/self.N))
         for mb in range(self.N):
+            print(mb, self.N)
             start_idx = mb*samples_per_subfunction
             end_idx = (mb+1)*samples_per_subfunction
             self.subfunction_references.append((start_idx, end_idx,))
 
         self.full_objective_references = self.subfunction_references
+        print('initialized ...')
         #self.full_objective_references = random.sample(self.subfunction_references, int(num_subfunctions/10))
 
 
@@ -512,7 +546,7 @@ class GLM:
 
         data_subf = dict()
         for key in self.data.keys():
-            data_subf[key] = self.data[key][idx_range[0]:idx_range[1]]
+            data_subf[key] = np.array(self.data[key][idx_range[0]:idx_range[1]])
 
         return glm.f_df(theta, data_subf, self.params)
 
