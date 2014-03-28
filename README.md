@@ -1,13 +1,11 @@
 Sum of Functions Optimizer (SFO)
 ================================
 
-This code implements the optimization algorithm, and reproduces the figures, contained in the paper    
-```citation
-Jascha Sohl-Dickstein, Ben Poole, and Surya Ganguli
-An adaptive low dimensional quasi-Newton sum of functions optimizer
-arXiv preprint arXiv:1311.2115 (2013)
-http://arxiv.org/abs/1311.2115
-```
+This code implements the optimization algorithm, and reproduces the figures, contained in the paper<br>
+> Jascha Sohl-Dickstein, Ben Poole, and Surya Ganguli<br>
+> An adaptive low dimensional quasi-Newton sum of functions optimizer<br>
+> arXiv preprint arXiv:1311.2115 (2013)<br>
+> http://arxiv.org/abs/1311.2115
 
 ## Use SFO
 To use SFO, you should first import SFO,  
