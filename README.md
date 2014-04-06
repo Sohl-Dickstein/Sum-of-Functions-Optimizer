@@ -30,6 +30,8 @@ The three required parameters for initialization are:
             each subfunction.  The elements in this list could be, eg, numpy
             matrices containing minibatches, or indices identifying the
             subfunction, or filenames from which target data should be read.
+            **If each subfunction corresponds to a minibatch, then the number of
+            subfunctions should be approximately \[number subfunctions\] = sqrt(\[dataset size\])/10**
 
 More detailed documentation, and additional options, can be found in **sfo.py**.
 
