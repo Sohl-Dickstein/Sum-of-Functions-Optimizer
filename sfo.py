@@ -35,6 +35,9 @@ class SFO(object):
             each subfunction.  The elements in this list could be, eg, numpy
             matrices containing minibatches, or indices identifying the
             subfunction, or filenames from which target data should be read.
+            If each subfunction corresponds to a minibatch, then the number
+            of subfunctions should be approximately
+            [number subfunctions] = sqrt([dataset size])/10.
 
         Optional Parameters, roughly in order of decreasing utility:
         args=() - This list will be passed through as *args to f_df.
@@ -196,6 +199,10 @@ class SFO(object):
             print "No optimization steps performed.  Change num_passes or num_steps."
         elif self.display > 0:
             print("optimize active {}/{}, f {}, <f> {}, pass #{}, sfo {} s, func {} s".format(sum(self.active), self.active.shape[0], self.hist_f_flat[-1], mean(self.hist_f[self.eval_count>0,0]), float(sum(self.eval_count))/self.N, self.time_pass - self.time_func, self.time_func))
+
+        if self.time_pass - self.time_func > self.time_func:
+            print "Optimization is spending too much time in SFO (%g s) relative to evaluating the objective function (%g s)!"%(self.time_pass - self.time_func, self.time_func)
+            print "Try reducing the number of subfunctions or minibatches."
 
         # reverse the flattening transformation on theta
         return self.theta_flat_to_original(self.theta)
