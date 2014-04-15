@@ -421,7 +421,7 @@ class SFO(object):
             self.max_eig_sub[indx] = self.min_eig_sub[indx]
             if self.eval_count[indx] > 2:
                 if self.display > 1:
-                    print("Subfunction evaluated %d times, but has no stored history.  This should never happen.")
+                    print("Subfunction evaluated %d times, but has no stored history.  This should never happen.  The step size is probably too small.  Try initializing SFO with a smaller hessian_init value."%self.eval_count[indx])
                 # # DEBUG
                 # self.min_eig_sub[indx] *= 2.
             return
