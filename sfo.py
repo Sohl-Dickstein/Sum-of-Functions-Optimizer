@@ -318,11 +318,9 @@ class SFO(object):
         xnew = x_in/x_in_length
 
         # find the component of x pointing out of the existing subspace
-        #DEBUG for i in range(4):
+        # TODO is 2 enough iterations?  should it be 3?
         for i in range(2): # do this multiple times for numerical stability
-            ## NOTE this next line is the most time consuming line in the whole code
-            xnew -= dot(self.P[:,:self.K_current], dot(self.P[:,:self.K_current].T, xnew))
-            #xnew -= dot(self.P, dot(self.P.T, xnew))
+            xnew -= dot(self.P, dot(self.P.T, xnew))
             ss = sqrt(sum(xnew**2))
             if ss < self.eps:
                 # it barely points out of the existing subspace
