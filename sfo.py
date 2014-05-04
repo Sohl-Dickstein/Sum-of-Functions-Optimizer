@@ -15,16 +15,16 @@ import warnings
 
 class SFO(object):
     def __init__(self, f_df, theta, subfunction_references, args=(), kwargs={},
-        display=2, max_history_terms=10, max_gradient_noise=1.,
-        hessian_init=1e6, init_subf=2, hess_max_dev = 1e8,
-        hessian_algorithm='bfgs', subfunction_selection='distance'):
+        display=2, max_history_terms=10, hessian_init=1e5, init_subf=2,
+        hess_max_dev = 1e8, hessian_algorithm='bfgs',
+        subfunction_selection='distance', max_gradient_noise=1.):
         """
         The main Sum of Functions Optimizer (SFO) class.
 
         Parameters:
         f_df - Returns the function value and gradient for a single subfunction 
             call.  Should have the form
-                [f, dfdtheta] = f_df(theta, subfunction_references[idx],
+                f, dfdtheta = f_df(theta, subfunction_references[idx],
                                       *args, **kwargs)
             where idx is the index of a single subfunction.
         theta - The initial parameters to be used for optimization.  theta can
@@ -35,21 +35,14 @@ class SFO(object):
             each subfunction.  The elements in this list could be, eg, numpy
             matrices containing minibatches, or indices identifying the
             subfunction, or filenames from which target data should be read.
-            If each subfunction corresponds to a minibatch, then the number
-            of subfunctions should be approximately
-            [number subfunctions] = sqrt([dataset size])/10.
 
         Optional Parameters, roughly in order of decreasing utility:
         args=() - This list will be passed through as *args to f_df.
         kwargs={} - This dictionary will be passed through as **kwargs to f_df.
         display=2 - Display level.  1 = once per SFO call, 2 = once per
             subfunction call, larger = debugging info
-        max_history_terms=10 - The number of history terms to use in the
-            BFGS algorithm.
-        max_gradient_noise=1. - The maximum ratio of standard error in the
-            gradient across subfunctions to the length of the average gradient
-            across subfunctions before the number of active subfunctions is
-            increased.
+        max_history_terms=10 - The number of history terms to use for the
+            BFGS updates.
         hessian_init=1e6 - The initial estimate of the Hessian for the first
             init_subf subfunctions is set to this value times the identity
             matrix.  This number should be large, but not so large that there
@@ -63,6 +56,10 @@ class SFO(object):
         subfunction_selection='distance' - The algorithm to use to choose the
             next subfunction to evaluated.  This can be maximum distance
             ('distance'), random ('random'), or cyclic ('cyclic').
+        max_gradient_noise=1. - The maximum ratio of standard error in the
+            gradient across subfunctions to the length of the average gradient
+            across subfunctions.  If this ratio is exceeded, the number of
+            active subfunctions is increased.
 
         See README.md for example code.
         """
@@ -92,7 +89,7 @@ class SFO(object):
         subspace_dimensionality = 2*self.N+2  # 2 to include current location
         # subspace can't be larger than the full space
         subspace_dimensionality = int(min([subspace_dimensionality, self.M]))
-        # the uptdate steps will be rescaled by this
+        # the update steps will be rescaled by this
         self.step_scale = 1.
         # "very small" for various tasks, most importantly identifying when
         # update steps are too small to be used for Hessian updates without
@@ -151,10 +148,10 @@ class SFO(object):
             self.P = eye(self.M)
             self.K_current = self.M+1
 
-        # store last theta (in the subspace)
-        theta_proj = dot( self.P.T, self.theta )
+        # theta projected into current working subspace
+        self.theta_proj = dot(self.P.T, self.theta)
         # holds the last position and the last gradient for all the objective functions
-        self.last_theta = tile(theta_proj, ((1,self.N)))
+        self.last_theta = tile(self.theta_proj, ((1,self.N)))
         self.last_df = zeros((self.K_max,self.N))
         # the history of theta changes for each subfunction
         self.hist_deltatheta = zeros((self.K_max,max_history_terms,self.N))
@@ -162,13 +159,13 @@ class SFO(object):
         self.hist_deltadf = zeros((self.K_max,max_history_terms,self.N))
         # the history of function values for each subfunction
         self.hist_f = ones((self.N, max_history_terms))*nan
-        # a flat history of all returned subfunction values
+        # a flat history of all returned subfunction values for debugging/diagnostics
         self.hist_f_flat = []
 
         # the approximate Hessian for each subfunction is stored
         # as dot(self.b[:.:.index], self.b[:.:.inedx].T)
         self.b = zeros((self.K_max,2*self.max_history,self.N)).astype(complex)
-        # TODO self.b could be real if another diagonal term carrying sign
+        # TODO(jascha) self.b could be real if another diagonal term carrying sign
         # information was introduced
 
         # the full Hessian (sum over all the subfunctions)
@@ -185,7 +182,11 @@ class SFO(object):
     def optimize(self, num_passes = 10, num_steps = None):
         """
         Optimize the objective function.  num_steps is the number of subfunction calls to make,
-        and num_passes is the number of effective passes through all subfunctions to make.
+        and num_passes is the number of effective passes through all subfunctions to make.  If
+        both are provided then num_steps takes precedence.
+
+        This, __init__, and check_grad are the only three functions that should be called by
+        the user
         """
         if num_steps==None:
             num_steps = int(num_passes*self.N)
@@ -194,15 +195,11 @@ class SFO(object):
                 print("pass {}, step {},".format(float(sum(self.eval_count))/self.N, i)),
             self.optimization_step()
             if self.display > 1:
-                print("f {}, <f> {}, active {}/{}, sfo {} s, func {} s".format(self.hist_f_flat[-1], mean(self.hist_f[self.eval_count>0,0]), sum(self.active), self.active.shape[0], self.time_pass - self.time_func, self.time_func))
+                print("active {}/{}, sfo time {} s, func time {} s, f {}, <f> {}".format(sum(self.active), self.active.shape[0], self.time_pass - self.time_func, self.time_func, self.hist_f_flat[-1], mean(self.hist_f[self.eval_count>0,0])))
         if num_steps < 1:
             print "No optimization steps performed.  Change num_passes or num_steps."
         elif self.display > 0:
-            print("optimize active {}/{}, f {}, <f> {}, pass #{}, sfo {} s, func {} s".format(sum(self.active), self.active.shape[0], self.hist_f_flat[-1], mean(self.hist_f[self.eval_count>0,0]), float(sum(self.eval_count))/self.N, self.time_pass - self.time_func, self.time_func))
-
-        if self.time_pass - self.time_func > self.time_func:
-            print "Optimization is spending too much time in SFO (%g s) relative to evaluating the objective function (%g s)!"%(self.time_pass - self.time_func, self.time_func)
-            print "Try reducing the number of subfunctions or minibatches."
+            print("active {}/{}, pass #{}, sfo {} s, func {} s, <f> {}".format(sum(self.active), self.active.shape[0], float(sum(self.eval_count))/self.N, self.time_pass - self.time_func, self.time_func, mean(self.hist_f[self.eval_count>0,0])))
 
         # reverse the flattening transformation on theta
         return self.theta_flat_to_original(self.theta)
@@ -222,13 +219,13 @@ class SFO(object):
         print "Testing step size %g"%small_diff
 
         for i in random.permutation(range(self.N)):
-            fl, dfl = self.f_df_wrapper(self.theta, i)
+            fl, dfl = self.f_df_wrapper(self.theta, i, return_full=True)
             ep = zeros((self.M,1))
             dfl_obs = zeros((self.M,1))
             dfl_err = zeros((self.M,1))
             for j in random.permutation(range(self.M)):
                 ep[j] = small_diff
-                fl2, _ = self.f_df_wrapper(self.theta + ep, i)
+                fl2, _ = self.f_df_wrapper(self.theta + ep, i, return_full=True)
                 dfl_obs[j] = (fl2 - fl)/small_diff
                 dfl_err[j] = dfl_obs[j] - dfl[j]
                 if abs(dfl_err[j]) > small_diff * 1e4:
@@ -241,6 +238,7 @@ class SFO(object):
             print("subfunction {}, total L2 gradient error {}".format(i, gerr))
             print
 
+
     def apply_subspace_transformation(self,T_left,T_right):
         """
         Apply change-of-subspace transformation.  This function is called when
@@ -248,6 +246,10 @@ class SFO(object):
         subspace.
         T_left - The covariant subspace to subspace projection matrix.
         T_right - The contravariant subspace projection matrix.
+
+        (note that currently T_left = T_right always since the subspace is
+        orthogonal.  This will change if eg the code is adapted to also
+        incorporate a "natural gradient" based parameter space transformation.)
         """
 
         ss = T_left.shape[1]
@@ -258,14 +260,33 @@ class SFO(object):
         self.last_theta = dot(T_left, self.last_theta)
         self.hist_deltadf = dot(T_right.T, self.hist_deltadf.reshape((ss,-1))).reshape((tt,-1,self.N))
         self.hist_deltatheta = dot(T_left, self.hist_deltatheta.reshape((ss,-1))).reshape((tt,-1,self.N))
+        # project stored hessian for each subfunction in to new subspace
         self.b = dot(T_right.T, self.b.reshape((ss,-1))).reshape((tt,2*self.max_history,self.N))
-        self.full_H = dot(T_right.T, self.full_H)
-        self.full_H = dot(T_right.T, self.full_H.T).T
+
+        # # project stored full hessian in to new subspace
+        # # TODO recompute full hessian from scratch to avoid accumulating numerical errors?
+        # self.full_H = dot(T_right.T, self.full_H)
+        # self.full_H = dot(T_right.T, self.full_H.T).T
+        # # project low dimensional representation of current theta in to new subspace
+        # self.theta_proj = dot(T_left, self.theta_proj)
+
+        ## To avoid slow accumulation of numerical errors, recompute full_H
+        ## and theta_proj when the subspace is collapsed.  Should not be a
+        ## leading time cost.
+        # theta projected into current working subspace
+        self.theta_proj = dot(self.P.T, self.theta)
+        # full approximate hessian
+        self.full_H = real(dot(self.b.reshape((ss,-1)), self.b.reshape((ss,-1)).T))
+
 
     def collapse_subspace(self, xl=None):
         """
         Collapse the subspace to its smallest dimensionality.
+
+        xl is a new direction that may not be in the history yet, so we pass
+        it in explicitly to make sure it's included.
         """
+
         if self.display > 2:
             print()
             print("collapsing subspace"),
@@ -273,12 +294,9 @@ class SFO(object):
         # the projection matrix from old to new subspace
         Pl = zeros((self.K_max,self.K_max))
 
-        # yy will hold all the directions to pack
-        # into the subspace.  initialize it with random noise,
-        # so that it still spans K_min dimensions even if not all the subfunctions
-        # are active yet
-        # TODO -- reduce the dimensionality below K_min before all the subfunctions
-        # are active?
+        # yy will hold all the directions to pack into the subspace.
+        # initialize it with random noise, so that it still spans K_min
+        # dimensions even if not all the subfunctions are active yet
         yy = random.randn(self.K_max,self.K_min)
         if xl == None:
             xl = random.randn(self.K_max,1)
@@ -288,17 +306,14 @@ class SFO(object):
         yy[:,:yz.shape[1]] = yz
         Pl[:,:self.K_min] = linalg.qr(yy)[0]
 
-        # TODO -- we know the end of this is zeros
-        # only need to project up to K_min dimensions
-        # and could zero out the remaining columns.
-        # (small win?)
+        # update the subspace
         self.P = dot(self.P, Pl)
 
-        # projection matrix from old to new basis
-        # (because Pl.T is orthonormal, co- and contra-variant transformations are identical)
+        # Pl is the projection matrix from old to new basis.  apply it to all the history
+        # terms
         self.apply_subspace_transformation(Pl.T, Pl)
 
-        # update the recorded subspace size
+        # update the stored subspace size
         self.K_current = self.K_min
 
 
@@ -310,6 +325,9 @@ class SFO(object):
         if self.K_current >= self.M:
             # no need to update the subspace if it spans the full space
             return
+        if sum(~isfinite(x_in)) > 0:
+            # bad vector!  bail.
+            return
         x_in_length = sqrt(sum(x_in**2))
         if x_in_length < self.eps:
             # if the new vector is too short, nothing to do
@@ -317,15 +335,22 @@ class SFO(object):
         # make x unit length
         xnew = x_in/x_in_length
 
-        # find the component of x pointing out of the existing subspace
-        # TODO is 2 enough iterations?  should it be 3?
-        for i in range(2): # do this multiple times for numerical stability
+        # Find the component of x pointing out of the existing subspace.
+        # We need to do this multiple times for numerical stability.
+        for i in range(3):
             xnew -= dot(self.P, dot(self.P.T, xnew))
             ss = sqrt(sum(xnew**2))
             if ss < self.eps:
                 # it barely points out of the existing subspace
+                # no need to add a new direction to the subspace
                 return
+            # make it unit length
             xnew /= ss
+            # if it was already largely orthogonal then numerical
+            # stability will be good enough
+            # TODO replace this with a more principled test
+            if ss > 0.1:
+                break
 
         # add a new column to the subspace containing the new direction
         self.P[:,self.K_current] = xnew[:,0]
@@ -340,13 +365,11 @@ class SFO(object):
             xl = dot(self.P.T, x_in)
             self.collapse_subspace(xl=xl)
 
-        # set the historical coordinates along this new dimension
-        self.last_theta += dot(self.P.T, xnew) * dot(xnew.T, self.theta)[0,0]
 
     def get_full_H_with_diagonal(self):
         """
         Get the full approximate Hessian, including the diagonal terms.
-        (note that self.full_H is stored without the diagonal terms)
+        (note that self.full_H is stored without including the diagonal terms)
         """
         full_H_combined = self.full_H + eye(self.K_max)*sum(self.min_eig_sub[self.active])
         return full_H_combined
@@ -361,19 +384,19 @@ class SFO(object):
         bdtheta = dot(self.b[:,:,indx].T, dtheta)
         Hdtheta = real(dot(self.b[:,:,indx], bdtheta))
         Hdtheta += dtheta*self.min_eig_sub[indx] # the diagonal contribution
-        df_pred = self.last_df[:,[indx]] + Hdtheta
+        # df_pred = self.last_df[:,[indx]] + Hdtheta
         f_pred = self.hist_f[indx,0] + dot(self.last_df[:,[indx]].T, dtheta)[0,0] + 0.5*dot(dtheta.T, Hdtheta)[0,0]
         return f_pred
 
 
-    def update_history(self, indx, theta_proj, df_proj):
+    def update_history(self, indx, theta_proj, f, df_proj):
         """
         Update history of position differences and gradient differences
         for subfunction indx.
         """
         # there needs to be at least one earlier measurement from this
         # subfunction to compute position and gradient differences.
-        if self.eval_count[indx] > 0:
+        if self.eval_count[indx] > 1:
             # differences in gradient and position
             ddf = df_proj - self.last_df[:,[indx]]
             ddt = theta_proj - self.last_theta[:,[indx]]
@@ -384,21 +407,25 @@ class SFO(object):
             if self.display > 3 and dot(ddf.T, ddt) < 0:
                 print("Warning!  Negative dgradient dtheta inner product.  Adding it anyway."),            
             if lddt < self.eps:
-                print("Largest change in theta too small ({}).  Not adding.".format(lddt)),
-                return
-            if lddf < self.eps:
-                print("Largest change in gradient too small {}.  Not adding.".format(lddf)),
-                return
-            if self.display > 3:
-                print("subf ||dtheta|| {}, subf ||ddf|| {}, corr(ddf,dtheta) {},".format(lddt, lddf, sum(ddt*ddf)/(lddt*lddf))),
+                print("Largest change in theta too small ({}).  Not adding.".format(lddt))
+            elif lddf < self.eps:
+                print("Largest change in gradient too small {}.  Not adding.".format(lddf))
+            else:
+                if self.display > 3:
+                    print("subf ||dtheta|| {}, subf ||ddf|| {}, corr(ddf,dtheta) {},".format(lddt, lddf, sum(ddt*ddf)/(lddt*lddf))),
 
-            # shift the history by one timestep
-            self.hist_deltatheta[:,1:,indx] = self.hist_deltatheta[:,:-1,indx]
-            # store the difference in theta since the subfunction was last evaluated
-            self.hist_deltatheta[:,[0],indx] = ddt
-            # do the same thing for the change in gradient
-            self.hist_deltadf[:,1:,indx] = self.hist_deltadf[:,:-1,indx]
-            self.hist_deltadf[:,[0],indx] = ddf
+                # shift the history by one timestep
+                self.hist_deltatheta[:,1:,indx] = self.hist_deltatheta[:,:-1,indx]
+                # store the difference in theta since the subfunction was last evaluated
+                self.hist_deltatheta[:,[0],indx] = ddt
+                # do the same thing for the change in gradient
+                self.hist_deltadf[:,1:,indx] = self.hist_deltadf[:,:-1,indx]
+                self.hist_deltadf[:,[0],indx] = ddf
+
+        self.last_theta[:,[indx]] = theta_proj
+        self.last_df[:,[indx]] = df_proj
+        self.hist_f[indx,1:] = self.hist_f[indx,:-1]
+        self.hist_f[indx,0] = f
 
 
     def update_hessian(self,indx):
@@ -408,8 +435,9 @@ class SFO(object):
         """
 
         gd = flatnonzero(sum(self.hist_deltatheta[:,:,indx]**2, axis=0)>0)
-        if len(gd) == 0:
-            # if no history, initialize with the median eigenvalue
+        num_gd = len(gd)
+        if num_gd == 0:
+            # if no history, initialize with the median eigenvalue from full Hessian
             if self.display > 2:
                 print(" no history "),
             self.b[:,:,indx] = 0.
@@ -418,56 +446,56 @@ class SFO(object):
             self.min_eig_sub[indx] = median(U)/sum(self.active)
             self.max_eig_sub[indx] = self.min_eig_sub[indx]
             if self.eval_count[indx] > 2:
-                if self.display > 1:
-                    print("Subfunction evaluated %d times, but has no stored history.  This should never happen.  The step size is probably too small.  Try initializing SFO with a smaller hessian_init value."%self.eval_count[indx])
-                # # DEBUG
-                # self.min_eig_sub[indx] *= 2.
+                if self.display > 2 or sum(self.eval_count) < 5:
+                    print("Subfunction evaluated %d times, but has no stored history."%self.eval_count[indx])
+                if sum(self.eval_count) < 5:
+                    print("You probably need to initialize SFO with a smaller hessian_init value.  Scaling down the Hessian to try to recover.  You're better off correcting the hessian_init value though!")
+                    self.min_eig_sub[indx] /= 10.
             return
 
-        # work in subspace of history for this
-        gd = sum(self.hist_deltatheta[:,:,indx]**2,axis=0)>0
-        P_hist = linalg.qr(hstack((self.hist_deltatheta[:,gd,indx],self.hist_deltadf[:,gd,indx])))[0]
+        # work in the subspace defined by this subfunction's history for this
+        P_hist, _ = linalg.qr(hstack((self.hist_deltatheta[:,gd,indx],self.hist_deltadf[:,gd,indx])))
         deltatheta_P = dot(P_hist.T, self.hist_deltatheta[:,gd,indx])
         deltadf_P = dot(P_hist.T, self.hist_deltadf[:,gd,indx])
 
-        # get an approximation to the smallest eigenvalue.
-        # This will be used on the diagonal for initialization.
-        try:
-            # calculate Hessian using pinv and squared equation.  just to get
-            # smallest eigenvalue.
-            # df = H dx
-            # df^T df = dx^T H^T H dx = dx^T H^2 dx
-            pdelthet = linalg.pinv(deltatheta_P)
-            dd = dot(deltadf_P, pdelthet)
-            H2 = dot(dd.T, dd)
-            #H2 = dot( pdelthet.T, dot( dot( self.hist_deltadf[:,gd,indx].T, self.hist_deltadf[:,gd,indx] ), pdelthet))
-            H2w, H2v = linalg.eigh(H2)
-            H2w = sqrt(abs(H2w))
-        except:
-            H2w = array([0,1])
-        if min(H2w) == 0:
-            # there was a failure using this history.  use the largest of
-            # the initializations from other functions
-            H2w += max(self.min_eig_sub[self.active])
+        ## get an approximation to the smallest eigenvalue.
+        ## This will be used as the diagonal initialization for BFGS.
+        # calculate Hessian using pinv and squared equation.  just to get
+        # smallest eigenvalue.
+        # df = H dx
+        # df^T df = dx^T H^T H dx = dx^T H^2 dx
+        pdelthet = linalg.pinv(deltatheta_P)
+        dd = dot(deltadf_P, pdelthet)
+        H2 = dot(dd.T, dd)
+        H2w, _ = linalg.eigh(H2)
+        H2w = sqrt(abs(H2w))
 
-        num_gd = sum(gd)
-        if num_gd > H2w.shape[0]:
-            num_gd = H2w.shape[0]
-        try:
-            self.min_eig_sub[indx] = min(H2w[H2w >= sort(H2w)[-num_gd]])
-            self.max_eig_sub[indx] = max(H2w)
-        except:
-            self.min_eig_sub[indx] = max(self.max_eig_sub[self.active])
-            self.max_eig_sub[indx] = self.min_eig_sub[indx]
+        # only the top ~ num_gd eigenvalues are expected to be well defined
+        H2w = sort(H2w)[-num_gd:]
+
+        if min(H2w) == 0 or sum(~isfinite(H2w)) > 0:
+            # there was a failure using this history.  either deltadf was
+            # degenerate (0 case), or deltatheta was (non-finite case).
+            # Initialize using other subfunctions
+            H2w[:] = max(self.min_eig_sub[self.active])
+            if self.display > 3:
+                print("ill-conditioned history"),
+
+        self.min_eig_sub[indx] = min(H2w)
+        self.max_eig_sub[indx] = max(H2w)
+
         if self.min_eig_sub[indx] < self.max_eig_sub[indx]/self.hess_max_dev:
             # constrain using allowed ratio
             self.min_eig_sub[indx] = self.max_eig_sub[indx]/self.hess_max_dev
             if self.display > 3:
                 print("constraining Hessian initialization"),
 
-        # recalculate Hessian
+        ## recalculate Hessian
+        # number of history terms
         num_hist = deltatheta_P.shape[1]
+        # the new hessian will be dot(b_p, b_p.T) + eye()*self.min_eig_sub[indx]
         b_p = zeros((P_hist.shape[1], num_hist*2)).astype(complex)
+        # step through the history
         for hist_i in reversed(range(num_hist)):
             s = deltatheta_P[:,[hist_i]].astype(complex)
             y = deltadf_P[:,[hist_i]].astype(complex)
@@ -483,9 +511,10 @@ class SFO(object):
                 term1 = y / sqrt(sum(y*s))
                 sHs = sum(s*Hs)
                 term2 = sqrt(complex(-1.)) * Hs / sqrt(sHs)
-                assert(sum(abs(array(Hs.shape) - array(s.shape)))==0)
                 if sum(~isfinite(term1)) > 0 or sum(~isfinite(term2)) > 0:
                     self.min_eig_sub[indx] = max(H2w)
+                    if self.display > 1:
+                        print("invalid bfgs history term.  should never get here!")
                     continue
                 b_p[:,[2*hist_i+1]] = term1
                 b_p[:,[2*hist_i]] = term2
@@ -496,21 +525,24 @@ class SFO(object):
                 raise(Exception("invalid Hessian update algorithm"))
 
         H = real(dot(b_p, b_p.T)) + eye(b_p.shape[0])*self.min_eig_sub[indx]
-        try:
-            # make sure it's positive definite
-            U, V = linalg.eigh(H)
-            U_median = median(U[U>0])
-            U[(U<(max(abs(U))/self.hess_max_dev))] = U_median
-        except:
-            V = eye(H.shape[0])
-            U = self.max_eig_sub[indx]*ones((H.shape[0],))
+        # constrain it to be positive definite
+        U, V = linalg.eigh(H)
+        if max(U) <= 0.:
+            # if there aren't any positive eigenvalues, then
+            # set them all to be the same conservative diagonal value
+            U[:] = self.max_eig_sub[indx]
             if self.display > 3:
-                print("bad eigenvalues in hessian"),
-        B_pos = dot(V*U, V.T) - eye(b_p.shape[0])*self.min_eig_sub[indx]
+                print("no positive eigenvalues after BFGS"),
+        # set any too-small eigenvalues to the median positive
+        # eigenvalue
+        U_median = median(U[U>0])
+        U[(U<(max(abs(U))/self.hess_max_dev))] = U_median
+
+        # the Hessian after it's been forced to be positive definite
+        H_posdef = dot(V*U, V.T)
+        # now break it apart into matrices b and a diagonal term again
+        B_pos = H_posdef - eye(b_p.shape[0])*self.min_eig_sub[indx]
         U, V = linalg.eigh(B_pos)
-        nonzero_indx = ~(U==0)
-        U = U[nonzero_indx]
-        V = V[:,nonzero_indx]
         b_p = V*sqrt(U.reshape((1,-1)).astype(complex))
 
         self.b[:,:,indx] = 0.
@@ -592,7 +624,8 @@ class SFO(object):
         """
         return self.theta_list_to_original(self.theta_flat_to_list(theta_original))
 
-    def f_df_wrapper(self, theta_in, idx):
+
+    def f_df_wrapper(self, theta_in, idx, return_full=False):
         """
         A wrapper around the subfunction objective f_df, that handles the transformation
         into and out of the flattened parameterization used internally by SFO.
@@ -605,21 +638,27 @@ class SFO(object):
         time_diff = time.time() - time_func_start
         self.time_func += time_diff # time spent in function evaluation
         df = self.theta_original_to_flat(df)
+        if return_full:
+            return f, df
 
+        # update the subspace with the new gradient direction
+        self.update_subspace(df)
+        # gradient projected into the current subspace
+        df_proj = dot( self.P.T, df )
         # keep a record of function evaluations
         self.hist_f_flat.append(f)
-        return f, df
+        self.eval_count[idx] += 1
 
-    def optimization_step(self):
-        """
-        Perform a single optimization step.  This function is typically called by SFO.optimize().
-        """
-        time_pass_start = time.time()
+        return f, df_proj
 
-        ## choose an index to update
-        # if an active subfunction has less than two observations, then
-        # evaluate it.do a second observation at that subfunction,
-        # so that it's possible to estimate a Hessian for it
+
+    def get_target_index(self):
+        """ Choose which subfunction to update this iteration. """
+
+        # If an active subfunction has less than two observations, then
+        # evaluate it.  We want to get to two evaluations per subfunction
+        # as quickly as possibly so that it's possible to estimate a Hessian
+        # for it
         gd = flatnonzero((self.eval_count < 2) & self.active)
         if len(gd) > 0:
             indx = random.permutation(gd)[0]
@@ -627,11 +666,9 @@ class SFO(object):
             # the default case -- use the subfunction evaluated farthest
             # from the current location, weighted by the Hessian
 
-            # theta projected into current working subspace
-            theta_proj = dot(self.P.T, self.theta)
             # difference between current theta and most recent evaluation
             # for all subfunctions
-            dtheta = theta_proj - self.last_theta
+            dtheta = self.theta_proj - self.last_theta
             # full Hessian
             full_H_combined = self.get_full_H_with_diagonal()
             # squared distance
@@ -659,35 +696,28 @@ class SFO(object):
         else:
             throw("unknown subfunction choice method")
 
+        return indx
 
-        if self.display > 2:
-            print("||dtheta|| {},".format(sqrt(sum((self.theta - self.theta_prior_step)**2)))),
-
-        df_failed = None
-        if self.display > 2:
-            print("index {}, last f {},".format(indx, self.hist_f[indx,0])),
-        self.events['step_failure'] = False
-        f, df = self.f_df_wrapper(self.theta, indx)
-
-        if self.display > 2:
-            print("step scale {},".format(self.step_scale)),
+    def handle_step_failure(self, f, df_proj, indx):
+        """
+        Check whether an update step failed.  Update current position if it did.
+        """
 
         # check to see whether the step should be a failure
         step_failure = False
-        if not isfinite(f) or sum(~isfinite(df))>0:
+        if not isfinite(f) or sum(~isfinite(df_proj))>0:
             # step is a failure if function or gradient is non-finite
             step_failure = True
-        elif self.eval_count[indx] == 0:
+        elif self.eval_count[indx] == 1:
             # the step is a candidate for failure if it's a new subfunction, and it's
             # much larger than expected
-            if max(self.eval_count) > 0 and f > mean(self.hist_f[self.eval_count>0,0]) + 3.*std(self.hist_f[self.eval_count>0,0]):
+            if f > mean(self.hist_f[self.eval_count>0,0]) + 3.*std(self.hist_f[self.eval_count>0,0]):
                 step_failure = True
         elif f > self.hist_f[indx,0]:
             # if this subfunction has increased in value, then look whether it's larger
             # than its predicted value by enough to trigger a failure
             # calculate the predicted value of this subfunction
-            theta_proj = dot( self.P.T, self.theta )
-            f_pred = self.get_predicted_subf(indx, theta_proj)
+            f_pred = self.get_predicted_subf(indx, self.theta_proj)
             # if the subfunction exceeds its predicted value by more than the predicted average gain
             # then mark the step as a failure
             # (note that it's been about N steps since this has been evaluated, and that this subfunction can lay
@@ -695,105 +725,150 @@ class SFO(object):
             if f - f_pred > self.f_predicted_total_improvement:
                 step_failure = True
 
-        if step_failure:
-            self.events['step_failure'] = True
-            theta_lastpos = self.theta_prior_step
-            f_lastpos, df_lastpos = self.f_df_wrapper(theta_lastpos, indx)
-            if f_lastpos < f or not isfinite(f) or sum(~isfinite(df))>0:
-                # if the function was smaller at the prior theta position, then this step was a failure
-                if self.display > 1:
-                    print("step failed, proposed f {}, std f {},".format(f, std(self.hist_f[self.eval_count>0,0]))),
-                # shorten the step length
-                self.step_scale /= 2.
-
-                # we will add the rejected update step to the history matrices
-                # for this subfunction as well.
-                # if the function value exploded, then shrink the update step to
-                # a reasonable order of magnitude before doing so
-                theta_proj = dot( self.P.T, self.theta )
-                f_pred = self.get_predicted_subf(indx, theta_proj)
-                predicted_f_diff = abs(f_pred - self.hist_f[indx,0])
-                if not isfinite(predicted_f_diff) or predicted_f_diff < self.eps:
-                    predicted_f_diff = self.eps
-                for i_ls in range(10):
-                    if self.display > 4:
-                        print("ls {} f_diff {} predicted_f_diff {} ".format(i_ls, f - f_lastpos, predicted_f_diff))
-                    if f - f_lastpos < 10.*predicted_f_diff:
-                        # the failed update is already with an order of magnitude
-                        # of the target update value -- no backoff required
-                        break
-                    # make the step length a factor of 100 shorter
-                    self.theta = 0.99*theta_lastpos + 0.01*self.theta
-                    # and recompute f and df at this new location
-                    f, df = self.f_df_wrapper(self.theta, indx)
-
-                # replace self.theta with its value at the last position
-                theta_failed = self.theta
-                df_failed = df
-                f_failed = f
-                self.theta = theta_lastpos
-                f = f_lastpos
-                df = df_lastpos
-            else:
-                if self.display > 2:
-                    print("step candidate for failure but kept, last position f {}, std f {},".format(f_lastpos, std(self.hist_f[self.eval_count>0,0]))),
-                step_failure = False
-                # we're still going to store the extra observation in the history
-                # so put it in the appropriate update variables
-                theta_failed = theta_lastpos
-                df_failed = df_lastpos
-                f_failed = f_lastpos
-
-                # decay the step_scale back towards 1
-                self.step_scale = 1./self.N + self.step_scale * (1. - 1./self.N)
-        else:
+        if not step_failure:
             # decay the step_scale back towards 1
             self.step_scale = 1./self.N + self.step_scale * (1. - 1./self.N)
+        else:
+            # shorten the step length
+            self.step_scale /= 2.
+            self.events['step_failure'] = True
+
+            # the subspace may be updated during the function calls
+            # so store this in the full space
+            df = dot(self.P, df_proj)
+
+            f_lastpos, df_lastpos_proj = self.f_df_wrapper(self.theta_prior_step, indx)
+            df_lastpos = dot(self.P, df_lastpos_proj)
+
+            ## if the function value exploded, then back it off until it's a
+            ## reasonable order of magnitude before adding anything to the history
+            f_pred = self.get_predicted_subf(indx, self.theta_proj)
+            if isfinite(self.hist_f[indx,0]):
+                predicted_f_diff = abs(f_pred - self.hist_f[indx,0])
+            else:
+                predicted_f_diff = abs(f - f_lastpos)
+            if not isfinite(predicted_f_diff) or predicted_f_diff < self.eps:
+                predicted_f_diff = self.eps
+
+            for i_ls in range(10):
+                if f - f_lastpos < 10.*predicted_f_diff:
+                    # the failed update is already with an order of magnitude
+                    # of the target update value -- no backoff required
+                    break
+                if self.display > 4:
+                    print("ls {} f_diff {} predicted_f_diff {} ".format(i_ls, f - f_lastpos, predicted_f_diff))
+                # make the step length a factor of 100 shorter
+                self.theta = 0.99*self.theta_prior_step + 0.01*self.theta
+                self.theta_proj = dot(self.P.T, self.theta)
+                # and recompute f and df at this new location
+                f, df_proj = self.f_df_wrapper(self.theta, indx)
+                df = dot(self.P, df_proj)
+
+            # we're done with function calls.  can move these back into the subspace.
+            df_proj = dot(self.P.T, df)
+            df_lastpos_proj = dot(self.P.T, df_lastpos)
+
+            if f < f_lastpos:
+                # the original objective was better -- but add the newly evaluated point to the history,
+                # just so it's not a wasted function call
+                theta_lastpos_proj = dot(self.P.T, self.theta_prior_step)
+                self.update_history(indx, theta_lastpos_proj, f_lastpos, df_lastpos_proj)
+                if self.display > 2:
+                    print("step failed, but last position was even worse ( f {}, std f {}),".format(f_lastpos, std(self.hist_f[self.eval_count>0,0]))),
+            else:
+                # add the change in theta and the change in gradient to the history for this subfunction
+                # before failing over to the last position
+                if isfinite(f) and sum(~isfinite(df_proj))==0:
+                    self.update_history(indx, self.theta_proj, f, df_proj)
+                if self.display > 2:
+                    print("step failed, proposed f {}, std f {},".format(f, std(self.hist_f[self.eval_count>0,0]))),
+                f = f_lastpos
+                df_proj = df_lastpos_proj
+                self.theta = self.theta_prior_step
+                self.theta_proj = dot(self.P.T, self.theta)
+
+        # don't let steps get so short that they don't provide any usable Hessian information
+        # TODO use a more principled cutoff here
+        self.step_scale = max([self.step_scale, 1e-5])
+
+        return step_failure, f, df_proj
+
+
+    def expand_active_subfunctions(self, full_H_inv, step_failure):
+        """
+        expand the set of active subfunctions as appropriate
+        """
+        # power in the average gradient direction
+        df_avg = mean(self.last_df[:,self.active], axis=1).reshape((-1,1))
+        p_df_avg = sum(df_avg * dot(full_H_inv, df_avg))
+        # power of the standard error
+        ldfs = self.last_df[:,self.active] - df_avg
+        num_active = sum(self.active)
+        p_df_sum = sum(ldfs * dot(full_H_inv, ldfs)) / num_active / (num_active - 1)
+        # if the standard errror in the estimated gradient is the same order of magnitude as the gradient,
+        # we want to increase the size of the active set
+        increase_desirable = p_df_sum >= p_df_avg*self.max_gradient_noise 
+        # increase the active set on step failure
+        increase_desirable = increase_desirable or step_failure
+        # increase the active set if we've done a full pass without updating it
+        increase_desirable = increase_desirable or self.iter_since_active_growth > num_active
+        # make sure all the subfunctions have enough evaluations for a Hessian approximation
+        # before bringing in new subfunctions
+        eligibile_for_increase = min(self.eval_count[self.active]) >= 2
+        # one more iteration has passed since the active set was last expanded
+        self.iter_since_active_growth += 1
+        if increase_desirable and eligibile_for_increase:
+            # the index of the new subfunction to activate
+            new_gd = random.permutation(flatnonzero(~self.active))[:1]
+            if len(new_gd) > 0:
+                self.iter_since_active_growth = 0
+                self.active[new_gd] = True
+
+
+    def optimization_step(self):
+        """
+        Perform a single optimization step.  This function is typically called by SFO.optimize().
+        """
+        time_pass_start = time.time()
+
+        ## choose an index to update
+        indx = self.get_target_index()
+
+        if self.display > 2:
+            print("||dtheta|| {},".format(sqrt(sum((self.theta - self.theta_prior_step)**2)))),
+            print("index {}, last f {},".format(indx, self.hist_f[indx,0])),
+            print("step scale {},".format(self.step_scale)),
+
+        # events are for debugging -- eg, so that the user supplied objective can check
+        # for step failure itself
+        self.events['step_failure'] = False
+
+        # evaluate subfunction value and gradient at new position
+        f, df_proj = self.f_df_wrapper(self.theta, indx)
+
+        # check for a failed update step, and adjust f, df, and self.theta
+        # as appropriate if one occurs.
+        step_failure, f, df_proj = self.handle_step_failure(f, df_proj, indx)
+
+        # add the change in theta and the change in gradient to the history for this subfunction
+        self.update_history(indx, self.theta_proj, f, df_proj)
 
         # increment the total distance traveled using the last update
         self.total_distance += sqrt(sum((self.theta - self.theta_prior_step)**2))
 
-        # update the subspace with the new gradient direction
-        self.update_subspace(df)
-        if not df_failed is None:
-            # also incorporate the gradient direction from a failed
-            # update into the subspace
-            self.update_subspace(df_failed)
-
-        # theta and gradient projected into the current subspace
-        theta_proj = dot( self.P.T, self.theta )
-        df_proj = dot( self.P.T, df )
-
-        # the contribution from this subfunction to the total Hessian approximation
+        # the current contribution from this subfunction to the total Hessian approximation
         H_pre_update = real(dot(self.b[:,:,indx], self.b[:,:,indx].T))
-
-        # add the change in theta and the change in gradeint to the history for this subfunction
-        self.update_history(indx, theta_proj, df_proj)
-        ## store information about the current position
-        self.last_theta[:,[indx]] = theta_proj
-        self.last_df[:,[indx]] = df_proj
-        self.hist_f[indx,1:] = self.hist_f[indx,:-1]
-        self.hist_f[indx,0] = f
-        self.eval_count[indx] += 1
-        if not df_failed is None:
-            # step was a candidate for failure, and we did an
-            # extra gradient evaluation.  use it to improve
-            # BFGS
-            # theta_failed and gradient projected into the current subspace
-            theta_failed_proj = dot( self.P.T, theta_failed )
-            df_failed_proj = dot( self.P.T, df_failed )
-            self.update_history(indx, theta_failed_proj, df_failed_proj)
-
         ## update this subfunction's Hessian estimate
         self.update_hessian(indx)
-        # update total Hessian using this subfunction's new contribution
+        # the new contribution from this subfunction to the total approximate hessian
         H_new = real(dot(self.b[:,:,indx], self.b[:,:,indx].T))   
+        # update total Hessian using this subfunction's updated contribution
         self.full_H += H_new - H_pre_update
 
         # calculate the total gradient, total Hessian, and total function value at the current location
         full_df = 0.
         for i in range(self.N):
-            dtheta = theta_proj - self.last_theta[:,[i]]
+            dtheta = self.theta_proj - self.last_theta[:,[i]]
             bdtheta = dot(self.b[:,:,i].T, dtheta)
             Hdtheta = real(dot(self.b[:,:,i], bdtheta))
             Hdtheta += dtheta*self.min_eig_sub[i] # the diagonal contribution
@@ -826,35 +901,12 @@ class SFO(object):
         self.theta_prior_step = self.theta.copy()
         # update theta to the new location
         self.theta += dtheta
+        self.theta_proj += dtheta_proj
         # the predicted improvement from this update step
         self.f_predicted_total_improvement = 0.5 * dot(dtheta_proj.T, dot(full_H_combined, dtheta_proj))
 
         ## expand the set of active subfunctions as appropriate
-        # power in the average gradient direction
-        df_avg = mean(self.last_df[:,self.active], axis=1).reshape((-1,1))
-        p_df_avg = sum(df_avg * dot(full_H_inv, df_avg))
-        # power of the standard error
-        ldfs = self.last_df[:,self.active] - df_avg
-        num_active = sum(self.active)
-        p_df_sum = sum(ldfs * dot(full_H_inv, ldfs)) / num_active / (num_active - 1)
-        # if the standard errror in the estimated gradient is the same order of magnitude as the gradient,
-        # we want to increase the size of the active set
-        increase_desirable = p_df_sum >= p_df_avg*self.max_gradient_noise 
-        # increase the active set on step failure
-        increase_desirable = increase_desirable or step_failure
-        # increase the active set if we've done a full pass without updating it
-        increase_desirable = increase_desirable or self.iter_since_active_growth > num_active
-        # make sure all the subfunctions have enough evaluations for a Hessian approximation
-        # before bringing in new subfunctions
-        eligibile_for_increase = min(self.eval_count[self.active]) >= 2
-        # one more iteration has passed since the active set was last expanded
-        self.iter_since_active_growth += 1
-        if increase_desirable and eligibile_for_increase:
-            # the index of the new subfunction to activate
-            new_gd = random.permutation(flatnonzero(~self.active))[:1]
-            if len(new_gd) > 0:
-                self.iter_since_active_growth = 0
-                self.active[new_gd] = True
+        self.expand_active_subfunctions(full_H_inv, step_failure)
 
         # record how much time was taken by this learning step
         time_diff = time.time() - time_pass_start
