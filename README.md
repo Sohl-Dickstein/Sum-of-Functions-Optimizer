@@ -20,7 +20,7 @@ then call the optimizer, specifying the number of optimization passes to perform
 The three required parameters for initialization are:    
 - *f_df* - Returns the function value and gradient for a single subfunction
             call.  Should have the form
-                `[f, dfdtheta] = f_df(theta, subfunction_references[idx])`,
+                `f, dfdtheta = f_df(theta, subfunction_references[idx])`,
             where *idx* is the index of a single subfunction.    
 - *theta_init* - The initial parameters to be used for optimization.  *theta_init* can
             be either a NumPy array, an array of NumPy arrays, or a dictionary
