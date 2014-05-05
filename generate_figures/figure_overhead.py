@@ -8,6 +8,11 @@ Attribution-Noncommercial License.
 ( http://creativecommons.org/licenses/by-nc/3.0/ )
 """
 
+# allow SFO to be imported despite being in the parent directoy
+import sys
+sys.path.append("..")
+sys.path.append(".")
+
 import matplotlib
 matplotlib.use('Agg')  # no displayed figures -- need to call before loading pylab
 import matplotlib.pyplot as plt
@@ -53,10 +58,14 @@ def explore_MN(burnin_steps=2, test_steps=2):
 
         # time spent in optimizer during burning
         t0 = optimizer.time_pass - optimizer.time_func
+        steps0 = np.sum(optimizer.eval_count)
         optimizer.optimize(num_passes=test_steps)
         t1 = optimizer.time_pass - optimizer.time_func
         t_diff = t1 - t0
-        T_arr.append(t_diff/float(test_steps))
+        steps1 = np.sum(optimizer.eval_count)
+        actual_test_steps = float(steps1 - steps0)/float(N)
+        T_arr.append(t_diff/actual_test_steps)
+        print T_arr[-1]
         
     return np.array(M_arr), np.array(N_arr), np.array(T_arr)
 

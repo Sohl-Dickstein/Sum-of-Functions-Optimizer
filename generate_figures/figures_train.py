@@ -17,6 +17,10 @@ Attribution-Noncommercial License.
 ( http://creativecommons.org/licenses/by-nc/3.0/ )
 """
 
+# allow SFO to be imported despite being in the parent directoy
+import sys
+sys.path.append("..")
+sys.path.append(".")
 
 from sfo import SFO
 from sag import SAG
@@ -243,7 +247,7 @@ class figures_train:
         """ Train model using SGD with various learning rates """
 
         N = len(self.model.subfunction_references)
-        for eta in 10**np.linspace(-5,1,7):
+        for eta in 10**np.linspace(-5,2,8):
             self.learner_name = "SGD %.4f"%eta
             print("\n\n" + self.learner_name)
             f = np.ones((N))*np.nan
@@ -266,7 +270,7 @@ class figures_train:
     def SGD_momentum(self, num_passes=20):
         """ Train model using SGD with various learning rates and momentums"""
 
-        learning_rates = 10**np.linspace(-5,1,5)
+        learning_rates = 10**np.linspace(-5,2,8)
         momentums = np.array([0.5, 0.9, 0.95, 0.99])
         params = product(learning_rates, momentums)
         N = len(self.model.subfunction_references)

@@ -214,7 +214,7 @@ def make_plot_single_model(hist_f, hist_x_projection, hist_events, model_name,
     ax = plt.axis()
     if "Autoencoder" in title:
         plt.yticks(np.arange(10, 46, 5.0), ["%d"%tt for tt in np.arange(10, 46, 5.0)])
-        plt.axis([ax[0], ax[1], 12.5, 35])
+        plt.axis([ax[0], ax[1], 13, 30])
     # elif "ICA" in title:
     #     plt.axis([ax[0], ax[1], 0.23, 140])
     elif "hard" in title:
@@ -409,7 +409,7 @@ def save_results(trainer, base_fname='figure_data_', store_x=True):
         full_objective_period=trainer.full_objective_period)
 
 
-def generate_data_SFO_N(num_passes=20, base_fname='num_minibatches', store_x=True):
+def generate_data_SFO_N(num_passes=51, base_fname='num_minibatches', store_x=True):
     """
     Same as generate_data(), but compares SFO with different numbers of minibatches
     rather than SFO to other optimizers.
@@ -454,7 +454,7 @@ def train_and_plot_SFO_N(num_passes=51, base_fname='num_minibatches'):
     make_plots(history_nested, num_subfunctions, full_objective_period, name_prefix='num_minibatches_')
 
 
-def generate_data_SFO_variations(num_passes=20, base_fname='convergence_variations', store_x=True):
+def generate_data_SFO_variations(num_passes=51, base_fname='convergence_variations', store_x=True):
     """
     Same as generate_data(), but compares different variations of SFO to each
     other, rather than SFO to other optimizers.
@@ -489,21 +489,22 @@ def train_and_plot_SFO_variations(num_passes=51, base_fname='convergence_variati
     make_plots(history_nested, num_subfunctions, full_objective_period, name_prefix='variations_')
 
 
-def generate_data(num_passes=20, base_fname='figure_data_', store_x=True):
+def generate_data(num_passes=51, base_fname='figure_data_', store_x=True):
     """
     train all the models in models_to_train using all the
     optimizers, and save the resulting function value traces
     in figure_data_*.npz files.
     """
     models_to_train = ( 
+                        #figures_models.DeepAE,
+                        figures_models.CIFARConvNet,
+                        figures_models.ICA,
                         figures_models.toy,
                         figures_models.logistic,
-                        figures_models.ContractiveAutoencoder,
-                        figures_models.ICA,
-                        figures_models.MLP_hard,
                         figures_models.MLP_soft,
+                        # figures_models.MLP_hard,
+                        figures_models.ContractiveAutoencoder,
                         figures_models.Hopfield,
-                        figures_models.CIFARConvNet,
                         )
     models_to_train = ( figures_models.logistic, ) # DEBUG
     
@@ -546,13 +547,12 @@ def train_and_plot(num_passes=51, base_fname='convergence'):
 
 
 if __name__ == '__main__':
-    # compare convergence for different optimizers
-    train_and_plot()
-    print "plots saved for optimizer comparison"
-    # compare convergence for different variations on SFO
-    train_and_plot_SFO_variations()
-    print "plots saved for variations on SFO algorithm comparison"
     # compare convergence for different numbers of subfunctions
     train_and_plot_SFO_N()
     print "plots saved for number of minibatches comparison"
-    #plt.show()
+    # compare convergence for different variations on SFO
+    train_and_plot_SFO_variations()
+    print "plots saved for variations on SFO algorithm comparison"
+    # compare convergence for different optimizers
+    train_and_plot()
+    print "plots saved for optimizer comparison"

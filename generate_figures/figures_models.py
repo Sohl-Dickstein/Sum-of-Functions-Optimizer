@@ -222,17 +222,22 @@ class ICA:
         mw = np.max(np.real(w))
         max_ratio = 1e4
         gd = np.nonzero(np.real(w) > mw/max_ratio)[0]
-        # whiten
-        P = V[gd,:]*(np.real(w[gd])**(-0.5)).reshape((-1,1))
+        # # whiten
+        # P = V[gd,:]*(np.real(w[gd])**(-0.5)).reshape((-1,1))
+        # don't whiten -- make the problem harder
+        P = V[gd,:]
         X = np.dot(P, X)
+        X /= np.std(X)
 
         # break the data up into minibatches
         self.subfunction_references = []
         for mb in range(num_subfunctions):
             self.subfunction_references.append(X[:, mb::num_subfunctions])
-        # the subset of the data used to compute the full objective function value
-        idx = random_choice(X.shape[1], 10000, replace=False)
-        self.full_objective_references = (X[:,idx].copy(),)
+        # compute the full objective on all the data
+        self.full_objective_references = self.subfunction_references
+        # # the subset of the data used to compute the full objective function value
+        # idx = random_choice(X.shape[1], 10000, replace=False)
+        # self.full_objective_references = (X[:,idx].copy(),)
 
         ## initialize parameters
         num_dims = X.shape[0]
@@ -319,6 +324,64 @@ class ICA:
 
         return L, ddL
 
+
+class DeepAE:
+    """
+    Deep Autoencoder from Hinton, G. E. and Salakhutdinov, R. R. (2006)
+    """
+    def __init__(self, num_subfunctions=50, num_dims=10, objective='l2'):
+        # don't introduce a Theano dependency until we have to
+        from utils import _tonp
+
+        self.name = 'DeepAE'
+        layer_sizes = [ 28*28, 1000, 500, 250, 30]
+        #layer_sizes = [ 28*28, 20]
+        # Load data
+        X, y = load_mnist()
+        # break the data up into minibatches
+        self.subfunction_references = []
+        for mb in range(num_subfunctions):
+            self.subfunction_references.append([X[:, mb::num_subfunctions], y[mb::num_subfunctions]])
+        # evaluate on subset of training data
+        self.n_full = 10000
+        idx = random_choice(X.shape[1], self.n_full, replace=False)
+        ##use all the training data for a smoother plot
+        #idx = np.array(range(X.shape[1]))
+        self.full_objective_references = [[X[:,idx].copy(), y[idx].copy()]]
+        from dropout.deepae import build_f_df # here so theano not required for import
+        self.theano_f_df, self.model = build_f_df(layer_sizes, use_bias=True, objective=objective)
+        crossent_params = False
+        if crossent_params:
+            history = np.load('/home/poole/Sum-of-Functions-Optimizer/sfo_output.npz')
+            out = dict(history=history['arr_0'])
+            params = out['history'].item()['x']['SFO']
+            self.theta_init = params
+        else:
+            self.theta_init = [param.get_value() for param in self.model.params]
+
+    def f_df(self, theta, args, gpu_batch_size=128):
+        X = args[0].T
+        y = args[1]
+        rem = np.mod(len(X), gpu_batch_size)
+        n_batches = (len(X) - rem) /  gpu_batch_size
+        splits = np.split(np.arange(len(X) - rem), n_batches)
+        if rem > 0:
+            splits.append(np.arange(len(X)-rem, len(X)))
+        sum_results = None
+        for split in splits:
+            theano_args = theta + [X[split]]
+            # Convert to float32 so that this works on GPU
+            theano_args = [arg.astype(np.float32) for arg in theano_args]
+            results = self.theano_f_df(*theano_args)
+            results = [_tonp(result) for result in results]
+            if sum_results is None:
+                sum_results = results
+            else:
+                sum_results  = [cur_res + new_res for cur_res, new_res in zip(results, sum_results)]
+        # Divide by number of datapoints.
+        sum_results = [result/len(X) for result in sum_results]
+        return sum_results[0], sum_results[1:]
+
 class MLP:
     """
     Multi-layer-perceptron
@@ -351,6 +414,7 @@ class MLP:
         theano_args = theta + [X, y]
         results = self.theano_f_df(*theano_args)
         return results[0], results[1:]
+
 class MLP_hard(MLP):
     """
     Multi-layer-perceptron with rectified-linear nonlinearity
@@ -457,7 +521,7 @@ class toy:
     def f_df(self, x, args):
         npow = args[0]/2.
         mn = args[1]
-        f = sum(((x-mn)**2)**npow)
+        f = np.sum(((x-mn)**2)**npow)
         df = npow*((x-mn)**2)**(npow-1.)*2*(x-mn)
         scl = 1. / np.prod(x.shape)
         return f*scl, df*scl
