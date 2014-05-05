@@ -39,7 +39,7 @@ More detailed documentation, and additional options, can be found in **sfo.py**.
 If too much time is spent inside SFO, relative to inside the objective function, then reduce the number of subfunctions by increasing the minibatch size or merging subfunctions.  Simple example code training an autoencoder is included at the end of this readme.  Email jascha@stanford.edu with any remaining questions.
 
 ## Reproduce figures from the paper
-To reproduce the figures from the paper, run **figure\_cartoon.py**, **figure\_overhead.py**, or **figure\_convergence.py**.  **figure\_overhead.py** and **figure\_convergence.py** both require a subdirectory **figure_data/** which contains training data, and is too large to commit to this GitHub repository.  This will be available for download shortly -- URL to follow.
+To reproduce the figures from the paper, run **figure\_cartoon.py**, **figure\_overhead.py**, or **figure\_convergence.py**.  **figure\_overhead.py** and **figure\_convergence.py** both expect a subdirectory **figure_data/** with training data.  This can be downloaded from https://www.dropbox.com/sh/h9z4djlgl2tagmu/GlVAJyErf8.
 
 
 ## Example code
