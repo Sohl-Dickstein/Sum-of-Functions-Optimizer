@@ -20,18 +20,21 @@
 %            matrix in every cell.  The gradient returned by f_df should have the
 %            same form as theta.
 %       subfunction_references - A cell array containing an identifying element
-%           for each subfunction.  The elements in this list could be, eg,
-%           matrices containing minibatches, or indices identifying the
-%           subfunction, or filenames from which target data should be read.
-%       varargin - Any additional parameters will be passed on to f_df each time
-%           it is called.
+%            for each subfunction.  The elements in this list could be, eg,
+%            matrices containing minibatches, or indices identifying the
+%            subfunction, or filenames from which target data should be read.
+%            If each subfunction corresponds to a minibatch, then the number of
+%            subfunctions should be approximately
+%            [number subfunctions] = sqrt([dataset size])/10.
+%       varargin - Any additional parameters will be passed through to f_df
+%            each time it is called.
 %     Returns:
 %       obj - sfo class instance.
 %   theta = optimize(num_passes)
 %     Optimize the objective function.
 %     Parameters:
 %       num_passes - The number of effective passes through
-%           subfunction_references to perform.
+%            subfunction_references to perform.
 %     Returns:
 %       theta - The estimated parameter vector after num_passes of optimization.
 %   check_grad()
@@ -144,11 +147,11 @@ classdef sfo < handle
             %            matrix in every cell.  The gradient returned by f_df should have the
             %            same form as theta.
             %       subfunction_references - A cell array containing an identifying element
-            %           for each subfunction.  The elements in this list could be, eg,
-            %           matrices containing minibatches, or indices identifying the
-            %           subfunction, or filenames from which target data should be read.
-            %       varargin - Any additional parameters will be passed on to f_df each time
-            %           it is called.
+            %            for each subfunction.  The elements in this list could be, eg,
+            %            matrices containing minibatches, or indices identifying the
+            %            subfunction, or filenames from which target data should be read.
+            %       varargin - Any additional parameters will be passed through to f_df
+            %            each time it is called.
             %     Returns:
             %       obj - sfo class instance.
 
@@ -943,6 +946,10 @@ classdef sfo < handle
 
 
         function [U, V] = eigh_wrapper(A)
+            % A wrapper which duplicates the order and format of the numpy
+            % eigh routine.  (note, eigh further assumes symmetric matrix.  don't
+            % think there's an equivalent MATLAB function?)
+
             [V,U] = eig(A);
             U = diag(U);
         end
