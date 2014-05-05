@@ -641,7 +641,7 @@ classdef sfo < handle
                     jj = jj + 1;
                 end                
             else
-                theta_original = obj.reshape_wrapper(theta_flat, size(obj.theta_original));
+                theta_new = obj.reshape_wrapper(theta_flat, size(obj.theta_original));
             end
         end
 
