@@ -8,7 +8,7 @@ SFO is a function optimizer for the case where the target function breaks into a
 > arXiv preprint arXiv:1311.2115 (2013)<br>
 > http://arxiv.org/abs/1311.2115
 
-This repository provides easy to use Python and MATLAB implementation of SFO, as well as functions to exactly reproduce the figures contained in the paper.<br>
+This repository provides easy to use Python and MATLAB implementations of SFO, as well as functions to exactly reproduce the figures in the paper.<br>
 
 ## Use SFO
 
