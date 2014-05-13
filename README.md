@@ -3,7 +3,7 @@ Sum of Functions Optimizer (SFO)
 
 SFO is a function optimizer for the case where the target function breaks into a sum over minibatches, or a sum over contributing functions.  It combines the benefits of both quasi-Newton and stochastic gradient descent techniques, and will likely converge faster and to a better function value than either.  It does not require tuning of hyperparameters.  It is described in more detail in the paper:
 > Jascha Sohl-Dickstein, Ben Poole, and Surya Ganguli<br>
-> An adaptive low dimensional quasi-Newton sum of functions optimizer<br>
+> Unifying stochastic gradient and quasi-Newton optimization methods in an adaptive low dimensional subspace<br>
 > International Conference on Machine Learning (2014)<br>
 > arXiv preprint arXiv:1311.2115 (2013)<br>
 > http://arxiv.org/abs/1311.2115
