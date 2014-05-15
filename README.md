@@ -3,12 +3,12 @@ Sum of Functions Optimizer (SFO)
 
 SFO is a function optimizer for the case where the target function breaks into a sum over minibatches, or a sum over contributing functions.  It combines the benefits of both quasi-Newton and stochastic gradient descent techniques, and will likely converge faster and to a better function value than either.  It does not require tuning of hyperparameters.  It is described in more detail in the paper:
 > Jascha Sohl-Dickstein, Ben Poole, and Surya Ganguli<br>
-> An adaptive low dimensional quasi-Newton sum of functions optimizer<br>
+> Fast large-scale optimization by unifying stochastic gradient and quasi-Newton methods<br>
 > International Conference on Machine Learning (2014)<br>
 > arXiv preprint arXiv:1311.2115 (2013)<br>
 > http://arxiv.org/abs/1311.2115
 
-This repository provides easy to use Python and MATLAB implementation of SFO, as well as functions to exactly reproduce the figures contained in the paper.<br>
+This repository provides easy to use Python and MATLAB implementations of SFO, as well as functions to exactly reproduce the figures in the paper.<br>
 
 ## Use SFO
 
@@ -72,18 +72,16 @@ Slightly more documentation can be found in **sfo.m**.
 
 Email jascha@stanford.edu with questions if you don't find your answer here.
 
-#### Using with Dropout
-
-Noise in the minibatch/subfunction gradients will break SFO, because it uses the change in the gradient to estimate the Hessian matrix.  If most of the gradient change is a result of noise rather than the result of the change in the parameters, then the Hessian estimate it produces will be horrible.
-
-This can be remedied by using frozen noise.  That is, assign a dropout mask to each datapoint.  Every time that datapoint is evaluated use the same dropout mask.  This makes the gradients consistent across multiple evaluations of the minibatch.
-
 #### Reducing overhead
 
 If too much time is spent inside SFO relative to inside the objective function, then reduce the number of subfunctions by increasing the minibatch size or merging subfunctions.
 
-## Reproduce figures from the paper
-To reproduce the figures from the paper, run **generate\_figures/figure\_cartoon.py**, **generate\_figures/figure\_overhead.py**, or **generate\_figures/figure\_convergence.py**.  **figure\_overhead.py** and **figure\_convergence.py** both expect a subdirectory **figure_data/** with training data.  This can be downloaded from https://www.dropbox.com/sh/h9z4djlgl2tagmu/GlVAJyErf8.
+#### Using with Dropout
+
+Stochastic gradients will break SFO, because it uses the change in the minibatch/subfunction gradient to estimate the Hessian matrix.  The benefits of noise regularization can be achieved without making the gradients stochastic by using frozen noise.  That is, in the case of dropout, assign a random dropout mask to each datapoint.  Every time that datapoint is evaluated however, use the same dropout mask.  This makes the gradients consistent across multiple evaluations of the minibatch.
+
+## Reproduce figures from paper
+To reproduce the figures from the paper, run **generate\_figures/figure\_cartoon.py**, **generate\_figures/figure\_overhead.py**, or **generate\_figures/figure\_convergence.py**.  Both **figure\_overhead.py** and **figure\_convergence.py** expect a subdirectory **figure_data/** with training data.  This can be downloaded from https://www.dropbox.com/sh/h9z4djlgl2tagmu/GlVAJyErf8.
 
 ## Example code
 
