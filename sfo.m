@@ -473,11 +473,17 @@ classdef sfo < handle
                     fprintf('Warning!  Negative dgradient dtheta inner product.  Adding it anyway.');
                 end
                 if lddt < obj.eps
-                    fprintf('Largest change in theta too small (%g).  Not adding to history.', lddt);
+                    if obj.display > 2
+                        fprintf('Largest change in theta too small (%g).  Not adding to history.', lddt);
+                    end
                 elseif lddf < obj.eps
-                    fprintf('Largest change in gradient too small (%g).  Not adding to history.', lddf);
+                    if obj.display > 2
+                        fprintf('Largest change in gradient too small (%g).  Not adding to history.', lddf);
+                    end
                 elseif abs(corr_ddf_ddt) < obj.eps
-                    fprintf('Inner product between dgradient and dtheta too small (%g). Not adding to history.', corr_ddf_ddt);
+                    if obj.display > 2
+                        fprintf('Inner product between dgradient and dtheta too small (%g). Not adding to history.', corr_ddf_ddt);
+                    end
                 else
                     if obj.display > 3
                         fprintf('subf ||dtheta|| %g, subf ||ddf|| %g, corr(ddf,dtheta) %g,', lddt, lddf, sum(ddt.*ddf)/(lddt.*lddf));
