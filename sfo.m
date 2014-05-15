@@ -322,6 +322,26 @@ classdef sfo < handle
             obj.full_H = real(obj.reshape_wrapper(obj.b,[ss,-1]) * obj.reshape_wrapper(obj.b,[ss,-1]).');
         end
 
+        function reorthogonalize_subspace(obj)
+            % check if the subspace has become non-orthogonal
+            subspace_eigs = eig(obj.P.' * obj.P);
+            if max(subspace_eigs) <= 1 + obj.eps
+                return
+            end
+
+            if obj.display > 2
+                fprintf('subspace has become non-orthogonal.  Performing QR.\n');
+            end
+            [Porth, ~] = qr(obj.P(:,1:obj.K_current), 0);
+            Pl = zeros(obj.K_max, obj.K_max);
+            Pl(:,1:obj.K_current) = obj.P.' * Porth;
+            % update the subspace;
+            obj.P(:,1:obj.K_current) = Porth;
+            % Pl is the projection matrix from old to new basis.  apply it to all the history;
+            % terms;
+            obj.apply_subspace_transformation(Pl.', Pl);
+        end
+
         function collapse_subspace(obj, xl)
             % Collapse the subspace to its smallest dimensionality.;
 
@@ -354,6 +374,9 @@ classdef sfo < handle
 
             % update the stored subspace size;
             obj.K_current = obj.K_min;
+
+            % re-orthogonalize the subspace if it's accumulated small errors
+            obj.reorthogonalize_subspace();
         end
 
 
@@ -444,13 +467,17 @@ classdef sfo < handle
                 lddt = sqrt(sum(ddt.^2));
                 lddf = sqrt(sum(ddf.^2));
 
-                if obj.display > 3 && (ddf.') * (ddt) < 0
+                corr_ddf_ddt = ddf.' * ddt;
+
+                if obj.display > 3 && corr_ddf_ddt < 0
                     fprintf('Warning!  Negative dgradient dtheta inner product.  Adding it anyway.');
                 end
                 if lddt < obj.eps
-                    fprintf('Largest change in theta too small (%g).  Not adding.', lddt);
+                    fprintf('Largest change in theta too small (%g).  Not adding to history.', lddt);
                 elseif lddf < obj.eps
-                    fprintf('Largest change in gradient too small (%g).  Not adding.', lddf);
+                    fprintf('Largest change in gradient too small (%g).  Not adding to history.', lddf);
+                elseif abs(corr_ddf_ddt) < obj.eps
+                    fprintf('Inner product between dgradient and dtheta too small (%g). Not adding to history.', corr_ddf_ddt);
                 else
                     if obj.display > 3
                         fprintf('subf ||dtheta|| %g, subf ||ddf|| %g, corr(ddf,dtheta) %g,', lddt, lddf, sum(ddt.*ddf)/(lddt.*lddf));
@@ -857,6 +884,11 @@ classdef sfo < handle
                 fprintf('||dtheta|| %g, ', sqrt(sum((obj.theta - obj.theta_prior_step).^2)));
                 fprintf('index %d, last f %g, ', indx, obj.hist_f(indx,1));
                 fprintf('step scale %g, ', obj.step_scale);
+            end
+            if obj.display > 8
+                C = obj.P.' * obj.P;
+                eC = eig(C);
+                fprintf('mne %g, mxe %g, ', min(eC(eC>0)), max(eC));
             end
 
             % evaluate subfunction value & gradient at new position;
