@@ -325,6 +325,7 @@ classdef sfo < handle
         function reorthogonalize_subspace(obj)
             % check if the subspace has become non-orthogonal
             subspace_eigs = eig(obj.P.' * obj.P);
+            % TODO(jascha) this may be a stricter cutoff than we need
             if max(subspace_eigs) <= 1 + obj.eps
                 return
             end

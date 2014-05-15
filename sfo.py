@@ -279,6 +279,25 @@ class SFO(object):
         self.full_H = real(dot(self.b.reshape((ss,-1)), self.b.reshape((ss,-1)).T))
 
 
+    def reorthogonalize_subspace(self):
+        # check if the subspace has become non-orthogonal
+        subspace_eigs, _ = linalg.eigh(dot(self.P.T, self.P))
+        # TODO(jascha) this may be a stricter cutoff than we need
+        if max(subspace_eigs) <= 1 + self.eps:
+            return
+
+        if self.display > 2:
+            print("Subspace has become non-orthogonal.  Performing QR.\n")
+        Porth, _ = linalg.qr(self.P[:,:self.K_current])
+        Pl = zeros((self.K_max, self.K_max))
+        Pl[:,:self.K_current] = dot(self.P.T, Porth)
+        # update the subspace;
+        self.P[:,:self.K_current] = Porth
+        # Pl is the projection matrix from old to new basis.  apply it to all the history
+        # terms
+        self.apply_subspace_transformation(Pl.T, Pl);
+
+
     def collapse_subspace(self, xl=None):
         """
         Collapse the subspace to its smallest dimensionality.
@@ -315,6 +334,9 @@ class SFO(object):
 
         # update the stored subspace size
         self.K_current = self.K_min
+
+        # re-orthogonalize the subspace if it's accumulated small errors
+        self.reorthogonalize_subspace();
 
 
     def update_subspace(self, x_in):
@@ -404,12 +426,19 @@ class SFO(object):
             lddt = sqrt(sum(ddt**2))
             lddf = sqrt(sum(ddf**2))
 
-            if self.display > 3 and dot(ddf.T, ddt) < 0:
+            corr_ddf_ddt = dot(ddf.T, ddt)[0,0]
+
+            if self.display > 3 and corr_ddf_ddt < 0:
                 print("Warning!  Negative dgradient dtheta inner product.  Adding it anyway."),            
             if lddt < self.eps:
-                print("Largest change in theta too small ({}).  Not adding.".format(lddt))
+                if self.display > 2:
+                    print("Largest change in theta too small ({}).  Not adding to history.".format(lddt))
             elif lddf < self.eps:
-                print("Largest change in gradient too small {}.  Not adding.".format(lddf))
+                if self.display > 2:
+                    print("Largest change in gradient too small ({}).  Not adding to history.".format(lddf))
+            elif abs(corr_ddf_ddt) < self.eps:
+                if self.display > 2:
+                    print("Inner product between dgradient and dtheta too small ({}).  Not adding to history.".format(corr_ddf_ddt))
             else:
                 if self.display > 3:
                     print("subf ||dtheta|| {}, subf ||ddf|| {}, corr(ddf,dtheta) {},".format(lddt, lddf, sum(ddt*ddf)/(lddt*lddf))),
