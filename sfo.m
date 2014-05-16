@@ -468,7 +468,7 @@ classdef sfo < handle
                 lddt = sqrt(sum(ddt.^2));
                 lddf = sqrt(sum(ddf.^2));
 
-                corr_ddf_ddt = ddf.' * ddt;
+                corr_ddf_ddt = ddf.' * ddt / (lddt*lddf);
 
                 if obj.display > 3 && corr_ddf_ddt < 0
                     fprintf('Warning!  Negative dgradient dtheta inner product.  Adding it anyway.');

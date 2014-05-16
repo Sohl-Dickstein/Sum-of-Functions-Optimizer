@@ -426,7 +426,7 @@ class SFO(object):
             lddt = sqrt(sum(ddt**2))
             lddf = sqrt(sum(ddf**2))
 
-            corr_ddf_ddt = dot(ddf.T, ddt)[0,0]
+            corr_ddf_ddt = dot(ddf.T, ddt)[0,0]/(lddt*lddf)
 
             if self.display > 3 and corr_ddf_ddt < 0:
                 print("Warning!  Negative dgradient dtheta inner product.  Adding it anyway."),            
