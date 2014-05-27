@@ -37,6 +37,11 @@ function sfo_demo()
     theta = optimizer.optimize(0.5);
     % continue running the optimizer for another 20 passes through the data
     theta = optimizer.optimize(20);
+    % plot the convergence trace
+    plot(optimizer.hist_f_flat);
+    xlabel('Iteration');
+    ylabel('Minibatch Function Value');
+    title('Convergence Trace');
 end
 
 % define an objective function and gradient
