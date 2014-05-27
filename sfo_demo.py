@@ -12,6 +12,7 @@ Attribution-Noncommercial License.
 ( http://creativecommons.org/licenses/by-nc/3.0/ )
 """
 
+import matplotlib.pyplot as plt
 import numpy as np
 from numpy.random import randn
 from sfo import SFO
@@ -57,5 +58,12 @@ optimizer = SFO(f_df, theta_init, sub_refs)
 # optimizer.check_grad()
 # run the optimizer for 1 pass through the data
 theta = optimizer.optimize(num_passes=1)
-# continue running the optimizer for another 50 passes through the data
-theta = optimizer.optimize(num_passes=50)
+# continue running the optimizer for another 20 passes through the data
+theta = optimizer.optimize(num_passes=20)
+
+# plot the convergence trace
+plt.plot(np.array(optimizer.hist_f_flat))
+plt.xlabel('Iteration')
+plt.ylabel('Minibatch Function Value')
+plt.title('Convergence Trace')
+plt.show()
