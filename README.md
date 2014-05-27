@@ -90,7 +90,8 @@ The following code blocks train an autoencoder using SFO in Python and MATLAB re
 ### Python example code
 
 ```python
-from numpy import *
+import matplotlib.pyplot as plt
+import numpy as np
 from numpy.random import randn
 from sfo import SFO
 
@@ -101,15 +102,15 @@ def f_df(theta, v):
     nonlinearity.
     v contains the training data, and will be different for each subfunction.
     """
-    h = 1./(1. + exp(-(dot(theta['W'], v) + theta['b_h'])))
-    v_hat = dot(theta['W'].T, h) + theta['b_v']
-    f = sum((v_hat - v)**2) / v.shape[1]
+    h = 1./(1. + np.exp(-(np.dot(theta['W'], v) + theta['b_h'])))
+    v_hat = np.dot(theta['W'].T, h) + theta['b_v']
+    f = np.sum((v_hat - v)**2) / v.shape[1]
     dv_hat = 2.*(v_hat - v) / v.shape[1]
-    db_v = sum(dv_hat, axis=1).reshape((-1,1))
-    dW = dot(h, dv_hat.T)
-    dh = dot(theta['W'], dv_hat)
-    db_h = sum(dh*h*(1.-h), axis=1).reshape((-1,1))
-    dW += dot(dh*h*(1.-h), v.T)
+    db_v = np.sum(dv_hat, axis=1).reshape((-1,1))
+    dW = np.dot(h, dv_hat.T)
+    dh = np.dot(theta['W'], dv_hat)
+    db_h = np.sum(dh*h*(1.-h), axis=1).reshape((-1,1))
+    dW += np.dot(dh*h*(1.-h), v.T)
     dfdtheta = {'W':dW, 'b_h':db_h, 'b_v':db_v}
     return f, dfdtheta
 
@@ -117,7 +118,7 @@ def f_df(theta, v):
 M = 20 # number visible units
 J = 10 # number hidden units
 D = 100000 # full data batch size
-N = int(sqrt(D)/10.) # number minibatches
+N = int(np.sqrt(D)/10.) # number minibatches
 # generate random training data
 v = randn(M,D)
 
@@ -133,8 +134,14 @@ theta_init = {'W':randn(J,M), 'b_h':randn(J,1), 'b_v':randn(M,1)}
 optimizer = SFO(f_df, theta_init, sub_refs)
 # run the optimizer for 1 pass through the data
 theta = optimizer.optimize(num_passes=1)
-# continue running the optimizer for another 50 passes through the data
-theta = optimizer.optimize(num_passes=50)
+# continue running the optimizer for another 20 passes through the data
+theta = optimizer.optimize(num_passes=20)
+
+# plot the convergence trace
+plt.plot(np.array(optimizer.hist_f_flat))
+plt.xlabel('Iteration')
+plt.ylabel('Minibatch Function Value')
+plt.title('Convergence Trace')
 
 # test the gradient of f_df
 optimizer.check_grad()
@@ -169,6 +176,12 @@ optimizer = sfo(@f_df_autoencoder, theta_init, sub_refs);
 theta = optimizer.optimize(0.5);
 % continue running the optimizer for another 20 passes through the data
 theta = optimizer.optimize(20);
+
+% plot the convergence trace
+plot(optimizer.hist_f_flat);
+xlabel('Iteration');
+ylabel('Minibatch Function Value');
+title('Convergence Trace');
 
 % test the gradient of f_df
 optimizer.check_grad();
