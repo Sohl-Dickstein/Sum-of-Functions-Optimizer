@@ -29,9 +29,9 @@ The three required initialization parameters are:
                 `f, dfdtheta = f_df(theta, subfunction_references[idx])`,
             where *idx* is the index of a single subfunction.    
 - *theta_init* - The initial parameters to be used for optimization.  *theta_init* can
-            be either a NumPy array, an array of NumPy arrays, or a dictionary
-            of NumPy arrays.  The gradient returned by *f_df* should have the
-            same form as *theta_init*.    
+            be either a NumPy array, an array of NumPy arrays, a dictionary of NumPy
+            arrays, or a nested combination thereof.  The gradient returned by *f_df*
+            should have the same form as *theta_init*.    
 - *subfunction_references* - A list containing an identifying element for
             each subfunction.  The elements in this list could be, eg, numpy
             matrices containing minibatches, or indices identifying the
