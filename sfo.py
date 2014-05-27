@@ -28,9 +28,9 @@ class SFO(object):
                                       *args, **kwargs)
             where idx is the index of a single subfunction.
         theta - The initial parameters to be used for optimization.  theta can
-            be either a NumPy array, an array of NumPy arrays, or a dictionary
-            of NumPy arrays.  The gradient returned by f_df should have the
-            same form as theta.
+            be either a NumPy array, an array of NumPy arrays, a dictionary
+            of NumPy arrays, or a nested variation thereof.  The gradient returned
+            by f_df should have the same form as theta.
         subfunction_references - A list containing an identifying element for
             each subfunction.  The elements in this list could be, eg, numpy
             matrices containing minibatches, or indices identifying the
@@ -192,14 +192,14 @@ class SFO(object):
             num_steps = int(num_passes*self.N)
         for i in range(num_steps):
             if self.display > 1:
-                print("pass {}, step {},".format(float(sum(self.eval_count))/self.N, i)),
+                print("pass {0}, step {1},".format(float(sum(self.eval_count))/self.N, i)),
             self.optimization_step()
             if self.display > 1:
-                print("active {}/{}, sfo time {} s, func time {} s, f {}, <f> {}".format(sum(self.active), self.active.shape[0], self.time_pass - self.time_func, self.time_func, self.hist_f_flat[-1], mean(self.hist_f[self.eval_count>0,0])))
+                print("active {0}/{1}, sfo time {2} s, func time {3} s, f {4}, <f> {5}".format(sum(self.active), self.active.shape[0], self.time_pass - self.time_func, self.time_func, self.hist_f_flat[-1], mean(self.hist_f[self.eval_count>0,0])))
         if num_steps < 1:
             print "No optimization steps performed.  Change num_passes or num_steps."
         elif self.display > 0:
-            print("active {}/{}, pass #{}, sfo {} s, func {} s, <f> {}".format(sum(self.active), self.active.shape[0], float(sum(self.eval_count))/self.N, self.time_pass - self.time_func, self.time_func, mean(self.hist_f[self.eval_count>0,0])))
+            print("active {0}/{1}, pass #{2}, sfo {3} s, func {4} s, <f> {5}".format(sum(self.active), self.active.shape[0], float(sum(self.eval_count))/self.N, self.time_pass - self.time_func, self.time_func, mean(self.hist_f[self.eval_count>0,0])))
 
         # reverse the flattening transformation on theta
         return self.theta_flat_to_original(self.theta)
@@ -232,10 +232,10 @@ class SFO(object):
                     print("large diff "),
                 else:
                     print("           "),
-                print("  gradient subfunction {}, dimension {}, analytic {}, finite diff {}, error {}".format(i, j, dfl[j], dfl_obs[j], dfl_err[j]))
+                print("  gradient subfunction {0}, dimension {1}, analytic {2}, finite diff {3}, error {4}".format(i, j, dfl[j], dfl_obs[j], dfl_err[j]))
                 ep[j] = 0.
             gerr = sqrt(sum((dfl - dfl_obs)**2))
-            print("subfunction {}, total L2 gradient error {}".format(i, gerr))
+            print("subfunction {0}, total L2 gradient error {1}".format(i, gerr))
             print
 
 
@@ -432,16 +432,16 @@ class SFO(object):
                 print("Warning!  Negative dgradient dtheta inner product.  Adding it anyway."),            
             if lddt < self.eps:
                 if self.display > 2:
-                    print("Largest change in theta too small ({}).  Not adding to history.".format(lddt))
+                    print("Largest change in theta too small ({0}).  Not adding to history.".format(lddt))
             elif lddf < self.eps:
                 if self.display > 2:
-                    print("Largest change in gradient too small ({}).  Not adding to history.".format(lddf))
+                    print("Largest change in gradient too small ({0}).  Not adding to history.".format(lddf))
             elif abs(corr_ddf_ddt) < self.eps:
                 if self.display > 2:
-                    print("Inner product between dgradient and dtheta too small ({}).  Not adding to history.".format(corr_ddf_ddt))
+                    print("Inner product between dgradient and dtheta too small ({0}).  Not adding to history.".format(corr_ddf_ddt))
             else:
                 if self.display > 3:
-                    print("subf ||dtheta|| {}, subf ||ddf|| {}, corr(ddf,dtheta) {},".format(lddt, lddf, sum(ddt*ddf)/(lddt*lddf))),
+                    print("subf ||dtheta|| {0}, subf ||ddf|| {1}, corr(ddf,dtheta) {2},".format(lddt, lddf, sum(ddt*ddf)/(lddt*lddf))),
 
                 # shift the history by one timestep
                 self.hist_deltatheta[:,1:,indx] = self.hist_deltatheta[:,:-1,indx]
@@ -584,17 +584,43 @@ class SFO(object):
         """
         Convert from the original parameter format into a list of numpy arrays.
         The original format can be a numpy array, or a dictionary of numpy arrays,
-        or a list of numpy arrays.
+        or a list of numpy arrays, or any nested variation thereof.
         """
         if isinstance(theta_original, ndarray):
             return [theta_original,]
         elif isinstance(theta_original, list) or isinstance(theta_original, tuple):
-            return theta_original
+            theta_list = []
+            for theta_element in theta_original:
+                theta_list.extend(self.theta_original_to_list(theta_element))
+            return theta_list
         elif isinstance(theta_original, dict):
             theta_list = []
             for key in sorted(theta_original.keys()):
-                theta_list.append(theta_original[key])
+                theta_list.extend(self.theta_original_to_list(theta_original[key]))
             return theta_list
+        else:
+            raise "invalid data format for theta"
+    def theta_list_to_original_recurse(self, theta_list, theta_original):
+        if isinstance(theta_original, list) or isinstance(theta_original, tuple):
+            theta_new = []
+            for theta_element in theta_original:
+                if isinstance(theta_element, ndarray):
+                    theta_new.append(theta_list[0])
+                    theta_list = theta_list[1:]
+                else:
+                    theta_item, theta_list = self.theta_list_to_original_recurse(theta_list, theta_element)
+                    theta_new.append(theta_item)
+            return theta_new, theta_list
+        elif isinstance(theta_original, dict):
+            theta_dict = dict()
+            for key in sorted(theta_original.keys()):
+                if isinstance(theta_original[key], ndarray):
+                    theta_dict[key] = theta_list[0]
+                    theta_list = theta_list[1:]
+                else:
+                    theta_item, theta_list = self.theta_list_to_original_recurse(theta_list, theta_original[key])
+                    theta_dict[key] = theta_item
+            return theta_dict, theta_list
         else:
             raise "invalid data format for theta"
     def theta_list_to_original(self, theta_list):
@@ -603,17 +629,11 @@ class SFO(object):
         """
         if isinstance(self.theta_original, ndarray):
             return theta_list[0]
-        elif isinstance(self.theta_original, list) or isinstance(self.theta_original, tuple):
-            return theta_list
-        elif isinstance(self.theta_original, dict):
-            theta_dict = dict()
-            list_indx = 0
-            for key in sorted(self.theta_original.keys()):
-                theta_dict[key] = theta_list[list_indx]
-                list_indx += 1
-            return theta_dict
         else:
-            raise "invalid data format for theta"
+            # we do this recursively to handle nested arrays or dictionaries of parameters
+            theta_new, _ = self.theta_list_to_original_recurse(theta_list, self.theta_original)
+            return theta_new
+
     def theta_list_to_flat(self, theta_list):
         """
         Convert from a list of numpy arrays into a 1d numpy array.
@@ -688,10 +708,14 @@ class SFO(object):
         # evaluate it.  We want to get to two evaluations per subfunction
         # as quickly as possibly so that it's possible to estimate a Hessian
         # for it
+        gd = flatnonzero((self.eval_count == 1) & self.active)
+        if len(gd) > 0:
+            return gd[0]
         gd = flatnonzero((self.eval_count < 2) & self.active)
         if len(gd) > 0:
-            indx = random.permutation(gd)[0]
-        elif self.subfunction_selection == 'distance':
+            return random.permutation(gd)[0]
+
+        if self.subfunction_selection == 'distance':
             # the default case -- use the subfunction evaluated farthest
             # from the current location, weighted by the Hessian
 
@@ -713,19 +737,22 @@ class SFO(object):
                     print("all active subfunctions evaluated here.  expanding active set."),
                 indx = random.permutation(flatnonzero(~self.active))[0]
                 self.active[indx] = True
-        elif self.subfunction_selection == 'random':
+            return indx
+
+        if self.subfunction_selection == 'random':
             # choose an index to update at random
             indx = random.permutation(flatnonzero(self.active))[0]
-        elif self.subfunction_selection == 'cyclic':
+            return indx
+
+        if self.subfunction_selection == 'cyclic':
             # choose indices to update in a cyclic fashion
             active_list = flatnonzero(self.active)
             indx = active_list[self.cyclic_subfunction_index]
             self.cyclic_subfunction_index += 1
             self.cyclic_subfunction_index %= sum(self.active)
-        else:
-            throw("unknown subfunction choice method")
+            return indx
 
-        return indx
+        throw("unknown subfunction choice method")
 
     def handle_step_failure(self, f, df_proj, indx):
         """
@@ -785,7 +812,7 @@ class SFO(object):
                     # of the target update value -- no backoff required
                     break
                 if self.display > 4:
-                    print("ls {} f_diff {} predicted_f_diff {} ".format(i_ls, f - f_lastpos, predicted_f_diff))
+                    print("ls {0} f_diff {1} predicted_f_diff {2} ".format(i_ls, f - f_lastpos, predicted_f_diff))
                 # make the step length a factor of 100 shorter
                 self.theta = 0.99*self.theta_prior_step + 0.01*self.theta
                 self.theta_proj = dot(self.P.T, self.theta)
@@ -803,14 +830,14 @@ class SFO(object):
                 theta_lastpos_proj = dot(self.P.T, self.theta_prior_step)
                 self.update_history(indx, theta_lastpos_proj, f_lastpos, df_lastpos_proj)
                 if self.display > 2:
-                    print("step failed, but last position was even worse ( f {}, std f {}),".format(f_lastpos, std(self.hist_f[self.eval_count>0,0]))),
+                    print("step failed, but last position was even worse ( f {0}, std f {1}),".format(f_lastpos, std(self.hist_f[self.eval_count>0,0]))),
             else:
                 # add the change in theta and the change in gradient to the history for this subfunction
                 # before failing over to the last position
                 if isfinite(f) and sum(~isfinite(df_proj))==0:
                     self.update_history(indx, self.theta_proj, f, df_proj)
                 if self.display > 2:
-                    print("step failed, proposed f {}, std f {},".format(f, std(self.hist_f[self.eval_count>0,0]))),
+                    print("step failed, proposed f {0}, std f {1},".format(f, std(self.hist_f[self.eval_count>0,0]))),
                 f = f_lastpos
                 df_proj = df_lastpos_proj
                 self.theta = self.theta_prior_step
@@ -864,9 +891,9 @@ class SFO(object):
         indx = self.get_target_index()
 
         if self.display > 2:
-            print("||dtheta|| {},".format(sqrt(sum((self.theta - self.theta_prior_step)**2)))),
-            print("index {}, last f {},".format(indx, self.hist_f[indx,0])),
-            print("step scale {},".format(self.step_scale)),
+            print("||dtheta|| {0},".format(sqrt(sum((self.theta - self.theta_prior_step)**2)))),
+            print("index {0}, last f {1},".format(indx, self.hist_f[indx,0])),
+            print("step scale {0},".format(self.step_scale)),
 
         # events are for debugging -- eg, so that the user supplied objective can check
         # for step failure itself
