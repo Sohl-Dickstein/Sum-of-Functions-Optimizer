@@ -12,7 +12,7 @@ Attribution-Noncommercial License.
 ( http://creativecommons.org/licenses/by-nc/3.0/ )
 """
 
-from numpy import *
+import numpy as np
 from numpy.random import randn
 from sfo import SFO
 
@@ -23,15 +23,15 @@ def f_df(theta, v):
     nonlinearity.
     v contains the training data, and will be different for each subfunction.
     """
-    h = 1./(1. + exp(-(dot(theta['W'], v) + theta['b_h'])))
-    v_hat = dot(theta['W'].T, h) + theta['b_v']
-    f = sum((v_hat - v)**2) / v.shape[1]
+    h = 1./(1. + np.exp(-(np.dot(theta['W'], v) + theta['b_h'])))
+    v_hat = np.dot(theta['W'].T, h) + theta['b_v']
+    f = np.sum((v_hat - v)**2) / v.shape[1]
     dv_hat = 2.*(v_hat - v) / v.shape[1]
-    db_v = sum(dv_hat, axis=1).reshape((-1,1))
-    dW = dot(h, dv_hat.T)
-    dh = dot(theta['W'], dv_hat)
-    db_h = sum(dh*h*(1.-h), axis=1).reshape((-1,1))
-    dW += dot(dh*h*(1.-h), v.T)
+    db_v = np.sum(dv_hat, axis=1).reshape((-1,1))
+    dW = np.dot(h, dv_hat.T)
+    dh = np.dot(theta['W'], dv_hat)
+    db_h = np.sum(dh*h*(1.-h), axis=1).reshape((-1,1))
+    dW += np.dot(dh*h*(1.-h), v.T)
     dfdtheta = {'W':dW, 'b_h':db_h, 'b_v':db_v}
     return f, dfdtheta
 
@@ -39,7 +39,7 @@ def f_df(theta, v):
 M = 20 # number visible units
 J = 10 # number hidden units
 D = 100000 # full data batch size
-N = int(sqrt(D)/10.) # number minibatches
+N = int(np.sqrt(D)/10.) # number minibatches
 # generate random training data
 v = randn(M,D)
 
