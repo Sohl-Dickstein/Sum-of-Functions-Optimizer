@@ -252,7 +252,7 @@ classdef sfo < handle
                 end
             end
             if obj.display > 0
-                fprintf('optimize active %d/%d, pass %g, sfo %g s, func %g s, <f> %f\n', sum(obj.active), size(obj.active, 1), sum(obj.eval_count)/obj.N, obj.time_pass - obj.time_func, obj.time_func, mean(obj.hist_f(obj.eval_count>0,1)));
+                fprintf('active %d/%d, pass %g, sfo time %g s, func time %g s, <f> %f\n', sum(obj.active), size(obj.active, 1), sum(obj.eval_count)/obj.N, obj.time_pass - obj.time_func, obj.time_func, mean(obj.hist_f(obj.eval_count>0,1)));
             end
 
             theta = obj.theta_flat_to_original(obj.theta);
