@@ -17,7 +17,8 @@ class SFO(object):
     def __init__(self, f_df, theta, subfunction_references, args=(), kwargs={},
         display=2, max_history_terms=10, hessian_init=1e5, init_subf=2,
         hess_max_dev = 1e8, hessian_algorithm='bfgs',
-        subfunction_selection='distance', max_gradient_noise=1.):
+        subfunction_selection='distance', max_gradient_noise=1.,
+        pos_def_loc='subfunction', pos_def_type='rectify'):
         """
         The main Sum of Functions Optimizer (SFO) class.
 
@@ -43,7 +44,7 @@ class SFO(object):
             subfunction call, larger = debugging info
         max_history_terms=10 - The number of history terms to use for the
             BFGS updates.
-        hessian_init=1e6 - The initial estimate of the Hessian for the first
+        hessian_init=1e5 - The initial estimate of the Hessian for the first
             init_subf subfunctions is set to this value times the identity
             matrix.  This number should be large, but not so large that there
             are numerical errors when the first update step has length
@@ -60,6 +61,17 @@ class SFO(object):
             gradient across subfunctions to the length of the average gradient
             across subfunctions.  If this ratio is exceeded, the number of
             active subfunctions is increased.
+        pos_def_loc='subfunction' - At what level (location) the Hessian is
+            constrained to be positive definite.  Valid values are
+            'subfunction', 'fullfunction', None.
+        pos_def_type='rectify' - The technique by which the Hessian is
+            constrained to be positive definite.  'rectify' indicates that
+            the all eigenvalues will be hard rectified to have a magnitude
+            of at least 1/hess_max_dev of the largest eigenvalue.  'median'
+            means that eigenvalues smaller than 1/hess_max_dev times the
+            largest will be set to the median positive eigenvalue.
+            'absolute' means that all eigenvalues will be replaced by their
+            absolute values.
 
         See README.md for example code.
         """
@@ -76,6 +88,8 @@ class SFO(object):
         self.sub_ref = subfunction_references
         self.hessian_algorithm = hessian_algorithm.lower()
         self.subfunction_selection = subfunction_selection.lower()
+        self.pos_def_loc = pos_def_loc
+        self.pos_def_type = pos_def_type
         # theta, in its original format
         self.theta_original = theta
         # theta, as a list of numpy arrays
@@ -394,6 +408,10 @@ class SFO(object):
         (note that self.full_H is stored without including the diagonal terms)
         """
         full_H_combined = self.full_H + eye(self.K_max)*sum(self.min_eig_sub[self.active])
+
+        if self.pos_def_loc == 'fullfunction':
+            full_H_combined = self.enforce_positive_definite(full_H_combined)
+
         return full_H_combined
 
 
@@ -553,22 +571,13 @@ class SFO(object):
             else:
                 raise(Exception("invalid Hessian update algorithm"))
 
-        H = real(dot(b_p, b_p.T)) + eye(b_p.shape[0])*self.min_eig_sub[indx]
         # constrain it to be positive definite
-        U, V = linalg.eigh(H)
-        if max(U) <= 0.:
-            # if there aren't any positive eigenvalues, then
-            # set them all to be the same conservative diagonal value
-            U[:] = self.max_eig_sub[indx]
-            if self.display > 3:
-                print("no positive eigenvalues after BFGS"),
-        # set any too-small eigenvalues to the median positive
-        # eigenvalue
-        U_median = median(U[U>0])
-        U[(U<(max(abs(U))/self.hess_max_dev))] = U_median
+        if self.pos_def_loc == 'subfunction':
+            H = real(dot(b_p, b_p.T)) + eye(b_p.shape[0])*self.min_eig_sub[indx]
+            H_posdef = self.enforce_positive_definite(H)
+        else:
+            H_posdef = H
 
-        # the Hessian after it's been forced to be positive definite
-        H_posdef = dot(V*U, V.T)
         # now break it apart into matrices b and a diagonal term again
         B_pos = H_posdef - eye(b_p.shape[0])*self.min_eig_sub[indx]
         U, V = linalg.eigh(B_pos)
@@ -578,6 +587,38 @@ class SFO(object):
         self.b[:,:b_p.shape[1],indx] = dot(P_hist, b_p)
 
         return
+
+
+    def enforce_positive_definite(self, H):
+        """
+        Enforce positive definiteness on the Hessian matrix
+        """
+
+        U, V = linalg.eigh(H)
+
+        if max(U) <= 0. and self.pos_def_type in ['median', 'rectify']:
+            # if there aren't any positive eigenvalues, then
+            # set them all to be the same conservative diagonal value
+            U[:] = self.max_eig_sub[indx]
+            if self.display > 3:
+                print("no positive eigenvalues after BFGS"),
+
+        if self.pos_def_type == 'median':
+            # set any too-small eigenvalues to the median positive
+            # eigenvalue
+            U_median = median(U[U>0])
+            min_eig = max(abs(U))/self.hess_max_dev
+            U[U<min_eig] = U_median
+        if self.pos_def_type == 'rectify':
+            # rectify any too small eigenvalues
+            min_eig = max(abs(U))/self.hess_max_dev
+            U[U<min_eig] = min_eig
+        if self.pos_def_type == 'absolute':
+            U = abs(U)
+
+        # the Hessian after it's been forced to be positive definite
+        H_posdef = dot(V*U, V.T)
+        return H_posdef
 
 
     def theta_original_to_list(self, theta_original):
