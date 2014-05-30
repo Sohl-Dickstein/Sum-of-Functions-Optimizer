@@ -169,6 +169,18 @@ class train:
         # self.optimizer.check_grad()
         x = self.optimizer.optimize(num_passes=num_passes)
 
+
+    def SFO_pos_def(self, num_passes=20, pos_def_type=None, pos_def_loc=None):
+        """ Train model using SFO."""
+        self.learner_name = pos_def_loc + ' ' + pos_def_type
+        print("\n\n" + self.learner_name)
+
+        self.optimizer = SFO(self.f_df_wrapper, self.model.theta_init, self.model.subfunction_references, pos_def_type=pos_def_type, pos_def_loc=pos_def_loc)
+        # # check the gradients
+        # self.optimizer.check_grad()
+        x = self.optimizer.optimize(num_passes=num_passes)
+
+
     def SFO_variations(self, num_passes=20):
         """
         Train model using several variations on the standard SFO algorithm.

@@ -572,8 +572,8 @@ class SFO(object):
                 raise(Exception("invalid Hessian update algorithm"))
 
         # constrain it to be positive definite
+        H = real(dot(b_p, b_p.T)) + eye(b_p.shape[0])*self.min_eig_sub[indx]
         if self.pos_def_loc == 'subfunction':
-            H = real(dot(b_p, b_p.T)) + eye(b_p.shape[0])*self.min_eig_sub[indx]
             H_posdef = self.enforce_positive_definite(H)
         else:
             H_posdef = H
