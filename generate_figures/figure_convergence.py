@@ -21,8 +21,8 @@ import matplotlib
 matplotlib.use('Agg')  # no displayed figures -- need to call before loading pylab
 import matplotlib.pyplot as plt
 
-import figures_models
-import figures_train
+import models
+import optimization_wrapper
 
 import datetime
 import glob
@@ -414,8 +414,8 @@ def generate_data_SFO_N(num_passes=51, base_fname='num_minibatches', store_x=Tru
     Same as generate_data(), but compares SFO with different numbers of minibatches
     rather than SFO to other optimizers.
     """
-    models_to_train = ( figures_models.logistic, figures_models.Hopfield )
-    models_to_train = ( figures_models.logistic, ) # DEBUG
+    models_to_train = ( models.logistic, models.Hopfield )
+    models_to_train = ( models.logistic, ) # DEBUG
 
     # the different numbers of minibatches to experiment with
     N_set = np.round(np.logspace(0, np.log10(200), 6)).astype(int)
@@ -425,7 +425,7 @@ def generate_data_SFO_N(num_passes=51, base_fname='num_minibatches', store_x=Tru
         # # first do LBFGS
         # np.random.seed(0) # make experiments repeatable
         # model = model_class(scale_by_N=False)
-        # trainer = figures_train.figures_train(model, full_objective_per_pass=1)
+        # trainer = optimization_wrapper.train(model, full_objective_per_pass=1)
         # optimizer = trainer.LBFGS
         # print("\n\n\n" + model.name + "\n" + str(optimizer))
         # optimizer(num_passes=num_passes)
@@ -435,7 +435,7 @@ def generate_data_SFO_N(num_passes=51, base_fname='num_minibatches', store_x=Tru
         for N in N_set:
             np.random.seed(0) # make experiments repeatable
             model = model_class(num_subfunctions=N, scale_by_N=False)
-            trainer = figures_train.figures_train(model, full_objective_per_pass=1)
+            trainer = optimization_wrapper.train(model, full_objective_per_pass=1)
             optimizer = trainer.SFO
             np.random.seed(0) # make experiments exactly repeatable
             print("\n\n\n" + model.name + "\n" + str(optimizer))
@@ -459,13 +459,13 @@ def generate_data_SFO_variations(num_passes=51, base_fname='convergence_variatio
     Same as generate_data(), but compares different variations of SFO to each
     other, rather than SFO to other optimizers.
     """
-    models_to_train = ( figures_models.logistic, figures_models.Hopfield )
-    models_to_train = ( figures_models.logistic, ) #DEBUG
+    models_to_train = ( models.logistic, models.Hopfield )
+    models_to_train = ( models.logistic, ) #DEBUG
     
     for model_class in models_to_train:
         np.random.seed(0) # make experiments repeatable
         model = model_class()
-        trainer = figures_train.figures_train(model)
+        trainer = optimization_wrapper.train(model)
         optimizers_to_use = [trainer.SFO_variations,]
         for optimizer in optimizers_to_use:
             np.random.seed(0) # make experiments exactly repeatable
@@ -496,22 +496,22 @@ def generate_data(num_passes=51, base_fname='figure_data_', store_x=True):
     in figure_data_*.npz files.
     """
     models_to_train = ( 
-                        #figures_models.DeepAE,
-                        figures_models.CIFARConvNet,
-                        figures_models.ICA,
-                        figures_models.toy,
-                        figures_models.logistic,
-                        figures_models.MLP_soft,
-                        # figures_models.MLP_hard,
-                        figures_models.ContractiveAutoencoder,
-                        figures_models.Hopfield,
+                        #models.DeepAE,
+                        models.CIFARConvNet,
+                        models.ICA,
+                        models.toy,
+                        models.logistic,
+                        models.MLP_soft,
+                        # models.MLP_hard,
+                        models.ContractiveAutoencoder,
+                        models.Hopfield,
                         )
-    models_to_train = ( figures_models.logistic, ) # DEBUG
+    models_to_train = ( models.logistic, ) # DEBUG
     
     for model_class in models_to_train:
         np.random.seed(0) # make experiments repeatable
         model = model_class()
-        trainer = figures_train.figures_train(model)
+        trainer = optimization_wrapper.train(model)
         optimizers_to_use = (
                                 trainer.SFO,
                                 trainer.LBFGS,

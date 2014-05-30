@@ -40,7 +40,7 @@ else:
     random_choice = my_random_choice
 
 
-class figures_train:
+class train:
     """
     Trains the model using a variety of optimization algorithms.
     This class also wraps the objective and gradient of the model,

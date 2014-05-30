@@ -20,8 +20,7 @@ import matplotlib.pyplot as plt
 from sfo import SFO
 import numpy as np
 
-import figures_models
-import figures_train
+import models
 import warnings
 
 def explore_MN(burnin_steps=2, test_steps=2):
@@ -50,7 +49,7 @@ def explore_MN(burnin_steps=2, test_steps=2):
         print "case %d of %d, M=%g, N=%g"%(ii+1, len(M_arr), M, N)
 
         # make the model
-        model = figures_models.toy(num_subfunctions=N, num_dims=M)
+        model = models.toy(num_subfunctions=N, num_dims=M)
         # initialize the optimizer
         optimizer = SFO(model.f_df, model.theta_init, model.subfunction_references, display=1)
         # burn in the optimizer, to make sure the subspace has eg. reached its full size
