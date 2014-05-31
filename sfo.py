@@ -204,12 +204,15 @@ class SFO(object):
         """
         if num_steps==None:
             num_steps = int(num_passes*self.N)
+        num_steps_start = sum(self.eval_count)
         for i in range(num_steps):
             if self.display > 1:
                 print("pass {0}, step {1},".format(float(sum(self.eval_count))/self.N, i)),
             self.optimization_step()
             if self.display > 1:
                 print("active {0}/{1}, sfo time {2} s, func time {3} s, f {4}, <f> {5}".format(sum(self.active), self.active.shape[0], self.time_pass - self.time_func, self.time_func, self.hist_f_flat[-1], mean(self.hist_f[self.eval_count>0,0])))
+            if sum(self.eval_count) - num_steps_start > num_steps:
+                break
         if num_steps < 1:
             print "No optimization steps performed.  Change num_passes or num_steps."
         elif self.display > 0:
