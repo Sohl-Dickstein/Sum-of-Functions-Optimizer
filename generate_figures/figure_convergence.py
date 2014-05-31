@@ -173,7 +173,7 @@ def make_plot_single_model(hist_f, hist_x_projection, hist_events, model_name,
 
     for nm in sorted_nicely(hist_f.keys()):
         ff = np.asarray(hist_f[nm])
-        ff[ff>1.5*ff[0]] = np.nan
+        #ff[ff>1.5*ff[0]] = np.nan
         xx = np.arange(1, len(ff)+1).astype(float)*full_objective_period/num_subfunctions
         if max(np.max(xx), fewest_passes) > 2*min(np.max(xx), fewest_passes) or nm == 'LBFGS':
             # ignore cases that were terminated early eg because of bad learning rate
@@ -210,7 +210,7 @@ def make_plot_single_model(hist_f, hist_x_projection, hist_events, model_name,
     plt.axes().set_axisbelow(True)
 
     ax = plt.axis()
-    plt.axis([0, fewest_passes, ax[2], ax[3]])
+    plt.axis([0, fewest_passes, ax[2], ff[0]])
     ax = plt.axis()
     if "Autoencoder" in title:
         plt.yticks(np.arange(10, 46, 5.0), ["%d"%tt for tt in np.arange(10, 46, 5.0)])
@@ -273,7 +273,7 @@ def make_plot_single_model(hist_f, hist_x_projection, hist_events, model_name,
     fig = plt.figure(figsize=figsize)
     for nm in sorted_nicely(hist_f.keys()):
         ff = np.asarray(hist_f[nm])
-        ff[ff>1.5*ff[0]] = np.nan
+        #ff[ff>1.5*ff[0]] = np.nan
         xx = np.arange(1, len(ff)+1).astype(float)*full_objective_period/num_subfunctions
         plt.semilogy( xx, ff-minf, label=nm, zorder=zorder[nm], **styledict[nm] )
     plt.ylabel( 'Full Batch Objective - Minimum' )
@@ -284,7 +284,7 @@ def make_plot_single_model(hist_f, hist_x_projection, hist_events, model_name,
     plt.grid()
     plt.axes().set_axisbelow(True)
     ax = plt.axis()
-    plt.axis([0, fewest_passes, ax[2], ax[3]])
+    plt.axis([0, fewest_passes, ax[2], ff[0]])
     try:
         plt.tight_layout()
     except:
