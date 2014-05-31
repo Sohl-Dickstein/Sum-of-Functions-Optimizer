@@ -546,19 +546,18 @@ def train_and_plot(num_passes=51, base_fname='convergence'):
     make_plots(history_nested, num_subfunctions, full_objective_period)
 
 
-def generate_data_pos_def_variations(num_passes=21, base_fname='pos_def_variations', store_x=True):
+def generate_data_pos_def_variations(num_passes=51, base_fname='pos_def_variations', store_x=True):
     """
     Same as generate_data(), but compares different variations of SFO to each
     other, with different methods of regularizing the Hessian, rather than SFO to other optimizers.
     """
-    models_to_train = ( models.logistic, models.Hopfield )
     models_to_train = ( models.toy, ) #DEBUG
-    
+    models_to_train = ( models.ContractiveAutoencoder, ) #DEBUG
     for model_class in models_to_train:
         np.random.seed(0) # make experiments repeatable
         model = model_class()
         trainer = optimization_wrapper.train(model)
-        for pos_def_loc in ['fullfunction', 'subfunction']:
+        for pos_def_loc in ['subfunction', 'fullfunction']:
             for pos_def_type in ['absolute', 'median', 'rectify']:
                 np.random.seed(0) # make experiments exactly repeatable
                 print("\n\n\n" + pos_def_loc + " " + pos_def_type + "\n")
@@ -566,7 +565,7 @@ def generate_data_pos_def_variations(num_passes=21, base_fname='pos_def_variatio
                 save_results(trainer, base_fname=base_fname, store_x=store_x)
 
 
-def train_and_plot_pos_def_variations(num_passes=21, base_fname='pos_def_variations'):
+def train_and_plot_pos_def_variations(num_passes=51, base_fname='pos_def_variations'):
     """
     Same as train_and_plot(), but compares different variations of SFO to each
     other, rather than SFO to other optimizers.
@@ -574,7 +573,7 @@ def train_and_plot_pos_def_variations(num_passes=21, base_fname='pos_def_variati
     base_fname += "_%s_"%(datetime.datetime.now().strftime("%Y%m%d-%H%M%S"))
     generate_data_pos_def_variations(num_passes=num_passes, base_fname=base_fname)
     history_nested, num_subfunctions, full_objective_period = load_results(base_fname=base_fname)
-    make_plots(history_nested, num_subfunctions, full_objective_period, name_prefix='variations_')
+    make_plots(history_nested, num_subfunctions, full_objective_period, name_prefix='pos_def_')
 
 if __name__ == '__main__':
     train_and_plot_pos_def_variations()
