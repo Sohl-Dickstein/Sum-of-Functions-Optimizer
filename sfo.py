@@ -18,7 +18,7 @@ class SFO(object):
         display=2, max_history_terms=10, hessian_init=1e5, init_subf=2,
         hess_max_dev = 1e8, hessian_algorithm='bfgs',
         subfunction_selection='distance', max_gradient_noise=1.,
-        pos_def_loc='subfunction', pos_def_type='rectify'):
+        pos_def_loc='subfunction', pos_def_type='median'):
         """
         The main Sum of Functions Optimizer (SFO) class.
 
@@ -64,8 +64,8 @@ class SFO(object):
         pos_def_loc='subfunction' - At what level (location) the Hessian is
             constrained to be positive definite.  Valid values are
             'subfunction', 'fullfunction', None.
-        pos_def_type='rectify' - The technique by which the Hessian is
-            constrained to be positive definite.  'rectify' indicates that
+        pos_def_type='threshold' - The technique by which the Hessian is
+            constrained to be positive definite.  'threshold' indicates that
             the all eigenvalues will be hard rectified to have a magnitude
             of at least 1/hess_max_dev of the largest eigenvalue.  'median'
             means that eigenvalues smaller than 1/hess_max_dev times the
@@ -599,7 +599,7 @@ class SFO(object):
 
         U, V = linalg.eigh(H)
 
-        if max(U) <= 0. and self.pos_def_type in ['median', 'rectify']:
+        if max(U) <= 0. and self.pos_def_type in ['median', 'threshold']:
             # if there aren't any positive eigenvalues, then
             # set them all to be the same conservative diagonal value
             U[:] = self.max_eig_sub[indx]
@@ -612,8 +612,8 @@ class SFO(object):
             U_median = median(U[U>0])
             min_eig = max(abs(U))/self.hess_max_dev
             U[U<min_eig] = U_median
-        if self.pos_def_type == 'rectify':
-            # rectify any too small eigenvalues
+        if self.pos_def_type == 'threshold':
+            # threshold any too small eigenvalues
             min_eig = max(abs(U))/self.hess_max_dev
             U[U<min_eig] = min_eig
         if self.pos_def_type == 'absolute':
