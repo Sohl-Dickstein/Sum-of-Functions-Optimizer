@@ -552,13 +552,13 @@ def generate_data_pos_def_variations(num_passes=51, base_fname='pos_def_variatio
     other, with different methods of regularizing the Hessian, rather than SFO to other optimizers.
     """
     models_to_train = ( models.toy, ) #DEBUG
-    models_to_train = ( models.ContractiveAutoencoder, ) #DEBUG
+    #models_to_train = ( models.ContractiveAutoencoder, ) #DEBUG
     for model_class in models_to_train:
         np.random.seed(0) # make experiments repeatable
         model = model_class()
         trainer = optimization_wrapper.train(model)
         for pos_def_loc in ['subfunction', 'fullfunction']:
-            for pos_def_type in ['absolute', 'median', 'rectify']:
+            for pos_def_type in ['absolute', 'median', 'threshold']:
                 np.random.seed(0) # make experiments exactly repeatable
                 print("\n\n\n" + pos_def_loc + " " + pos_def_type + "\n")
                 trainer.SFO_pos_def(num_passes=num_passes, pos_def_type=pos_def_type, pos_def_loc=pos_def_loc)
