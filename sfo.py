@@ -981,18 +981,18 @@ class SFO(object):
         dtheta_proj = -dot(full_H_inv, full_df) * self.step_scale
 
         #DEBUG
-        # dtheta_proj_length = sqrt(sum(dtheta_proj**2))
-        # if sum(self.eval_count) > self.N and dtheta_proj_length > 1e-20:
-        #     # only allow a step to be up to a factor of 2 longer than the
-        #     # average step length
-        #     avg_length = self.total_distance / float(sum(self.eval_count))
-        #     length_ratio = dtheta_proj_length / avg_length
-        #     ratio_scale = 10.
-        #     if length_ratio > ratio_scale:
-        #         if self.display > 3:
-        #             print "truncating step length from %g to %g"%(dtheta_proj_length, ratio_scale*avg_length),
-        #         dtheta_proj_length /= length_ratio/ratio_scale
-        #         dtheta_proj /= length_ratio/ratio_scale
+        dtheta_proj_length = sqrt(sum(dtheta_proj**2))
+        if sum(self.eval_count) > self.N and dtheta_proj_length > self.eps:
+            # only allow a step to be up to a factor of ratio_scale longer than the
+            # average step length
+            avg_length = self.total_distance / float(sum(self.eval_count))
+            length_ratio = dtheta_proj_length / avg_length
+            ratio_scale = 2.
+            if length_ratio > ratio_scale:
+                if self.display > 3:
+                    print "truncating step length from %g to %g"%(dtheta_proj_length, ratio_scale*avg_length),
+                dtheta_proj_length /= length_ratio/ratio_scale
+                dtheta_proj /= length_ratio/ratio_scale
 
         # the update to theta, in the full dimensional space
         dtheta = dot(self.P, dtheta_proj)
