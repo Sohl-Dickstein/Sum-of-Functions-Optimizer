@@ -139,6 +139,19 @@ def make_plot_single_model(hist_f, hist_x_projection, hist_events, model_name,
         styledict[nm] = {'color':'r', 'ls':'-', 'linewidth':3}
         if 'batch' in nm:
             styledict[nm]['ls'] = ':'
+
+    for nm in hist_f.keys():
+        if 'subfunction' in nm:
+            styledict[nm]['ls'] = ':'
+        if 'fullfunction' in nm:
+            styledict[nm]['ls'] = '-'
+        if 'absolute' in nm:
+            styledict[nm]['color'] = 'k'
+        if 'median' in nm:
+            styledict[nm]['color'] = 'r'
+        if 'threshold' in nm:
+            styledict[nm]['color'] = 'c'
+
     # SAG
     prop = [nm for nm in hist_f.keys() if 'SAG' in nm]
     best_traces(prop, hist_f, styledict, 'g')
