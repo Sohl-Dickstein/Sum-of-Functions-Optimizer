@@ -503,9 +503,9 @@ class toy:
     to random powers.
     """
 
-    def __init__(self, num_subfunctions=100, num_dims=100, nper = 5):
+    def __init__(self, num_subfunctions=100, num_dims=1000, nper = 50):
         # self.name = r'$\sum_{ij}{\left(\left|x_j-u_{ij}\right|+0.1\right)}^{a_i}$, for $a_i \in U[-3,3]$, $u_{ij} \in N(0,1)$'
-        self.name = r'$\sum_i{\left(\left|\left|P x - u_i\right|\right|+0.1\right)}^{a_i}$'
+        self.name = r'$\sum_i{\left(\left|\left|P  x - u_i\right|\right|+0.1\right)}^{a_i}$'
         #, $u_i \tilde N(0,I)$, $P_i \tilde N(0,I)' , $a_i \in U[-3,3]$
 
         # create the array of subfunction identifiers
