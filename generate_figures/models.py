@@ -503,26 +503,50 @@ class toy:
     to random powers.
     """
 
-    def __init__(self, num_subfunctions=100, num_dims=10):
-        self.name = '||x-u||^a, a in U[1.5,4.5]'
+    def __init__(self, num_subfunctions=100, num_dims=100, nper = 5):
+        # self.name = r'$\sum_{ij}{\left(\left|x_j-u_{ij}\right|+0.1\right)}^{a_i}$, for $a_i \in U[-3,3]$, $u_{ij} \in N(0,1)$'
+        self.name = r'$\sum_i{\left(\left|\left|P x - u_i\right|\right|+0.1\right)}^{a_i}$'
+        #, $u_i \tilde N(0,I)$, $P_i \tilde N(0,I)' , $a_i \in U[-3,3]$
 
         # create the array of subfunction identifiers
         self.subfunction_references = []
         N = num_subfunctions
         for i in range(N):
-            npow = np.random.rand()*3. + 1.5
-            mn = np.random.randn(num_dims,1)
-            self.subfunction_references.append([npow,mn])
+            args_list = []
+            for j in range(nper):
+                npow = np.random.rand()*6. - 3.
+                mn = np.random.randn(1,1)[0,0]
+                P = np.random.randn(1,num_dims) / np.sqrt(num_dims)
+                args_list.append([npow,mn,P])
+            self.subfunction_references.append(args_list)
         self.full_objective_references = self.subfunction_references
 
         ## initialize parameters
         self.theta_init = np.random.randn(num_dims,1)
 
-    def f_df(self, x, args):
-        npow = args[0]/2.
+    def f_df(self, x, args_list):
+        f = 0.
+        df = 0.
+        for args in args_list:
+            fl, dfl = self.f_df_inner(x, args)
+            f += fl/float(len(args_list))
+            df += dfl/float(len(args_list))
+        return f, df
+
+    def f_df_inner(self, x, args):
+        eps = 0.1
+        npow = args[0]
         mn = args[1]
-        f = np.sum(((x-mn)**2)**npow)
-        df = npow*((x-mn)**2)**(npow-1.)*2*(x-mn)
+        P = args[2]
+
+        ip = np.dot(P,x)[0,0]
+        fin = np.abs(ip-mn)
+        f = np.sum((fin + eps)**npow)
+        df = npow * (fin + eps)**(npow-1.) * np.sign(ip-mn) * P.T
+        # fin = np.sqrt(np.sum(((x-mn)**2)))
+        # f = (fin + eps)**npow
+        # df = npow*(fin + eps)**(npow-1.)/fin*(x-mn)
+
         scl = 1. / np.prod(x.shape)
         return f*scl, df*scl
 
