@@ -172,7 +172,7 @@ class SFO(object):
         self.full_H = zeros((self.K_max,self.K_max))
 
         # holds diagnostic information (eg, step failure, when the subspace is collapsed)
-        self.events = defaultdict(lambda: False)
+        self.events = dict()
 
         # used to keep track of the current subfunction if the update order is
         # cyclic (subfunction_selection='cyclic')
@@ -599,7 +599,9 @@ class SFO(object):
                 theta_list.extend(self.theta_original_to_list(theta_original[key]))
             return theta_list
         else:
-            raise "invalid data format for theta"
+            # if it doesn't match anything else, assume it's a scalar
+            # TODO(jascha) error checking here
+            return [asarray(theta_original).reshape((1,)),]
     def theta_list_to_original_recurse(self, theta_list, theta_original):
         if isinstance(theta_original, list) or isinstance(theta_original, tuple):
             theta_new = []
@@ -607,22 +609,35 @@ class SFO(object):
                 if isinstance(theta_element, ndarray):
                     theta_new.append(theta_list[0])
                     theta_list = theta_list[1:]
-                else:
+                elif isinstance(theta_element, dict) or \
+                        isinstance(theta_element, list) or \
+                        isinstance(theta_element, tuple):
                     theta_item, theta_list = self.theta_list_to_original_recurse(theta_list, theta_element)
                     theta_new.append(theta_item)
+                else:
+                    # if it doesn't match anything else, assume it's a scalar
+                    theta_new.append(theta_list[0][0])
+                    theta_list = theta_list[1:]                    
             return theta_new, theta_list
         elif isinstance(theta_original, dict):
             theta_dict = dict()
             for key in sorted(theta_original.keys()):
-                if isinstance(theta_original[key], ndarray):
+                theta_element = theta_original[key]
+                if isinstance(theta_element, ndarray):
                     theta_dict[key] = theta_list[0]
                     theta_list = theta_list[1:]
-                else:
+                elif isinstance(theta_element, dict) or \
+                        isinstance(theta_element, list) or \
+                        isinstance(theta_element, tuple):
                     theta_item, theta_list = self.theta_list_to_original_recurse(theta_list, theta_original[key])
                     theta_dict[key] = theta_item
+                else:
+                    # if it doesn't match anything else, assume it's a scalar
+                    theta_dict[key] = theta_list[0][0]
+                    theta_list = theta_list[1:]
             return theta_dict, theta_list
         else:
-            raise "invalid data format for theta"
+            raise Exception("invalid data format for theta")
     def theta_list_to_original(self, theta_list):
         """
         Convert from a list of numpy arrays into the original parameter format.
