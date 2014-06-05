@@ -174,7 +174,8 @@ theta_init = {randn(J,M), randn(J,1), randn(M,1)};
 optimizer = sfo(@f_df_autoencoder, theta_init, sub_refs);
 % run the optimizer for half a pass through the data
 theta = optimizer.optimize(0.5);
-% continue running the optimizer for another 20 passes through the data
+% run the optimizer for another 20 passes through the data, continuing from 
+% the theta value where the prior call to optimize() ended
 theta = optimizer.optimize(20);
 
 % plot the convergence trace
