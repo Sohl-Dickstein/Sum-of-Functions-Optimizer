@@ -35,7 +35,8 @@ function sfo_demo()
     %optimizer.check_grad();
     % run the optimizer for half a pass through the data
     theta = optimizer.optimize(0.5);
-    % continue running the optimizer for another 20 passes through the data
+    % run the optimizer for another 20 passes through the data, continuing from 
+    % the theta value where the prior call to optimize() ended
     theta = optimizer.optimize(20);
     % plot the convergence trace
     plot(optimizer.hist_f_flat);
