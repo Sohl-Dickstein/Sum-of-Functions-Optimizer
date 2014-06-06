@@ -508,7 +508,7 @@ class SFO(object):
             # Initialize using other subfunctions
             H2w[:] = max(self.min_eig_sub[self.active])
             if self.display > 3:
-                print("ill-conditioned history"),
+                print("Ill-conditioned history of gradient changes.  This may be because your gradient is wrong or has poor numerical precision.  Try calling SFO.check_grad()."),
 
         self.min_eig_sub[indx] = min(H2w)
         self.max_eig_sub[indx] = max(H2w)
@@ -779,6 +779,8 @@ class SFO(object):
         if not isfinite(f) or sum(~isfinite(df_proj))>0:
             # step is a failure if function or gradient is non-finite
             step_failure = True
+            if self.display > 2:
+                print("non-finite function value or gradient"),
         elif self.eval_count[indx] == 1:
             # the step is a candidate for failure if it's a new subfunction, and it's
             # much larger than expected
