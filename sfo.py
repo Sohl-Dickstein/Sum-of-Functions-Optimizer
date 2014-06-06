@@ -13,11 +13,22 @@ import scipy.linalg
 import time
 import warnings
 
+# GPU imports
+try:
+    import pycuda.gpuarray as gpuarray
+    import pycuda.driver as cuda
+    import pycuda.autoinit
+    from cublas_util import cu_gemv
+    gpu_available = True
+except ImportError:
+    gpu_available = False
+
 class SFO(object):
     def __init__(self, f_df, theta, subfunction_references, args=(), kwargs={},
         display=2, max_history_terms=10, hessian_init=1e5, init_subf=2,
         hess_max_dev = 1e8, hessian_algorithm='bfgs',
-        subfunction_selection='distance', max_gradient_noise=1.):
+        subfunction_selection='distance', max_gradient_noise=1.,
+        use_gpu=False):
         """
         The main Sum of Functions Optimizer (SFO) class.
 
@@ -60,6 +71,7 @@ class SFO(object):
             gradient across subfunctions to the length of the average gradient
             across subfunctions.  If this ratio is exceeded, the number of
             active subfunctions is increased.
+        use_gpu=False - Use GPU for matvecs. Requires PyCUDA and scikits.cuda.
 
         See README.md for example code.
         """
@@ -94,14 +106,15 @@ class SFO(object):
         # "very small" for various tasks, most importantly identifying when
         # update steps are too small to be used for Hessian updates without
         # incurring large numerical errors.
+        # TODO should this be a different magnitude for GPU 32 bit floats?
         self.eps = 1e-12
 
         # the min and max dimenstionality for the subspace
         self.K_min = subspace_dimensionality
         self.K_max = ceil(self.K_min*1.5)
         self.K_max = int(min([self.K_max, self.M]))
-        # self.P holds the subspace
-        self.P = zeros((self.M,self.K_max))
+        # Initial  subspace
+        P_init = zeros((self.M,self.K_max))
 
         # store the minimum and maximum eigenvalue from each approximate
         # Hessian
@@ -134,22 +147,32 @@ class SFO(object):
         # theta
         rr = sqrt(sum(self.theta**2))
         if rr > 0:
-            self.P[:,[0]] = self.theta/rr
+            P_init[:,[0]] = self.theta/rr
         else:
             # initial theta is 0 -- initialize randomly
-            self.P[:,[0]] = random.randn(self.theta.shape[0],1)
-            self.P[:,[0]] /= sqrt(sum(self.P[:,[0]]**2))
+            P_init[:,[0]] = random.randn(self.theta.shape[0],1)
+            P_init[:,[0]] /= sqrt(sum(P_init[:,[0]]**2))
 
         if self.M == self.K_max:
             # if the subspace spans the full space, then just make
             # P the identity matrix
             if self.display > 1:
                 print("subspace spans full space"),
-            self.P = eye(self.M)
+            P_init = eye(self.M)
             self.K_current = self.M+1
 
+        self.use_gpu = use_gpu
+        if self.use_gpu and not gpu_available:
+            raise Exception("GPU requested but PyCUDA and/or scikits.cuda is unavilable.")
+        if self.use_gpu:
+            self.PT = gpuarray.to_gpu(P_init.T.copy().astype(float32))
+            self.x_gpu = gpuarray.to_gpu(zeros((self.M,1), dtype=float32))
+            self.y_gpu = gpuarray.to_gpu(zeros((self.K_max,1), dtype=float32))
+        # Store initial subspace
+        self.set_subspace(P_init)
+
         # theta projected into current working subspace
-        self.theta_proj = dot(self.P.T, self.theta)
+        self.theta_proj = self.project(self.theta)
         # holds the last position and the last gradient for all the objective functions
         self.last_theta = tile(self.theta_proj, ((1,self.N)))
         self.last_df = zeros((self.K_max,self.N))
@@ -239,6 +262,38 @@ class SFO(object):
             print
 
 
+    def set_subspace(self, P):
+        if self.use_gpu:
+            # Make sure type and ordering of numpy array is correct for setting GPU array.
+            PT = (P.T.astype(float32).copy())
+            self.PT.set(PT)
+            #self.PT = gpuarray.to_gpu(PP)
+        else:
+            self.P = P
+
+    def project(self, x):
+        if self.use_gpu:
+            self.x_gpu.set(x.astype(float32))
+            y  = cu_gemv(self.PT, self.x_gpu, self.y_gpu, transpose=False)
+        else:
+            y = dot(self.P.T, x)
+        return  y.astype(float64)
+
+    def expand(self, y):
+        if self.use_gpu:
+            self.y_gpu.set(y.astype(float32));
+            x  = cu_gemv(self.PT, self.y_gpu, self.x_gpu, transpose=True)
+        else:
+            x = dot(self.P, y)
+        return x.astype(float64)
+
+    def update_subspace_column(self, idx, x):
+        if self.use_gpu:
+            self.PT[idx, :].set(x.astype(float32))
+        else:
+            self.P[:, idx] = x
+
+
     def apply_subspace_transformation(self,T_left,T_right):
         """
         Apply change-of-subspace transformation.  This function is called when
@@ -274,25 +329,31 @@ class SFO(object):
         ## and theta_proj when the subspace is collapsed.  Should not be a
         ## leading time cost.
         # theta projected into current working subspace
-        self.theta_proj = dot(self.P.T, self.theta)
+        self.theta_proj = self.project(self.theta)
         # full approximate hessian
         self.full_H = real(dot(self.b.reshape((ss,-1)), self.b.reshape((ss,-1)).T))
 
 
-    def reorthogonalize_subspace(self):
-        # check if the subspace has become non-orthogonal
-        subspace_eigs, _ = linalg.eigh(dot(self.P.T, self.P))
+    def reorthogonalize_subspace(self, P):
+        """ check if the subspace has become non-orthogonal """
+
+        # TODO(jascha) most of this function could be done on the GPU
+
+        subspace_eigs, _ = linalg.eigh(dot(P.T, P))
         # TODO(jascha) this may be a stricter cutoff than we need
         if max(subspace_eigs) <= 1 + self.eps:
             return
 
         if self.display > 2:
             print("Subspace has become non-orthogonal.  Performing QR.\n")
-        Porth, _ = linalg.qr(self.P[:,:self.K_current])
+        Porth, _ = linalg.qr(P[:,:self.K_current])
         Pl = zeros((self.K_max, self.K_max))
         Pl[:,:self.K_current] = dot(self.P.T, Porth)
         # update the subspace;
-        self.P[:,:self.K_current] = Porth
+        Porth_full = zeros((self.M, self.K_max))
+        Porth_full[:,:self.K_current] = Porth
+        self.set_subspace(Porth_full)
+
         # Pl is the projection matrix from old to new basis.  apply it to all the history
         # terms
         self.apply_subspace_transformation(Pl.T, Pl);
@@ -321,12 +382,18 @@ class SFO(object):
             xl = random.randn(self.K_max,1)
         # the most recent position and gradient for all active subfunctions,
         # as well as the current position and gradient (which will not be saved in the history yet)
-        yz = hstack((self.last_df[:,self.active], self.last_theta[:,self.active], xl, dot(self.P.T,self.theta)))
+        yz = hstack((self.last_df[:,self.active], self.last_theta[:,self.active], xl, self.project(self.theta)))
         yy[:,:yz.shape[1]] = yz
         Pl[:,:self.K_min] = linalg.qr(yy)[0]
 
         # update the subspace
-        self.P = dot(self.P, Pl)
+        if self.use_gpu:
+            P_old = self.PT.get().T
+        else:
+            P_old = self.P
+        #TODO(ben): Do mat-mat on GPU?
+        P_new = dot(P_old, Pl)
+        self.set_subspace(P_new)
 
         # Pl is the projection matrix from old to new basis.  apply it to all the history
         # terms
@@ -336,7 +403,7 @@ class SFO(object):
         self.K_current = self.K_min
 
         # re-orthogonalize the subspace if it's accumulated small errors
-        self.reorthogonalize_subspace();
+        self.reorthogonalize_subspace(P_new);
 
 
     def update_subspace(self, x_in):
@@ -360,7 +427,7 @@ class SFO(object):
         # Find the component of x pointing out of the existing subspace.
         # We need to do this multiple times for numerical stability.
         for i in range(3):
-            xnew -= dot(self.P, dot(self.P.T, xnew))
+            xnew -= self.expand(self.project(xnew))
             ss = sqrt(sum(xnew**2))
             if ss < self.eps:
                 # it barely points out of the existing subspace
@@ -375,7 +442,7 @@ class SFO(object):
                 break
 
         # add a new column to the subspace containing the new direction
-        self.P[:,self.K_current] = xnew[:,0]
+        self.update_subspace_column(self.K_current, xnew[:,0])
         self.K_current += 1
 
         self.events['collapse subspace'] = False
@@ -384,7 +451,7 @@ class SFO(object):
             self.events['collapse subspace'] = True
             # xl may not be in the history yet, so we pass it in explicitly to make
             # sure it's used
-            xl = dot(self.P.T, x_in)
+            xl = self.project(x_in)
             self.collapse_subspace(xl=xl)
 
 
@@ -551,7 +618,7 @@ class SFO(object):
                 diff = y - Hs
                 b_p[:,[hist_i]] = diff/sqrt(sum(s*diff))
             else:
-                raise(Exception("invalid Hessian update algorithm"))
+                raise Exception("invalid Hessian update algorithm")
 
         H = real(dot(b_p, b_p.T)) + eye(b_p.shape[0])*self.min_eig_sub[indx]
         # constrain it to be positive definite
@@ -708,7 +775,7 @@ class SFO(object):
         # update the subspace with the new gradient direction
         self.update_subspace(df)
         # gradient projected into the current subspace
-        df_proj = dot( self.P.T, df )
+        df_proj = self.project(df)
         # keep a record of function evaluations
         self.hist_f_flat.append(f)
         self.eval_count[idx] += 1
@@ -806,10 +873,10 @@ class SFO(object):
 
             # the subspace may be updated during the function calls
             # so store this in the full space
-            df = dot(self.P, df_proj)
+            df = self.expand(df_proj)
 
             f_lastpos, df_lastpos_proj = self.f_df_wrapper(self.theta_prior_step, indx)
-            df_lastpos = dot(self.P, df_lastpos_proj)
+            df_lastpos = self.expand(df_lastpos_proj)
 
             ## if the function value exploded, then back it off until it's a
             ## reasonable order of magnitude before adding anything to the history
@@ -830,19 +897,19 @@ class SFO(object):
                     print("ls {0} f_diff {1} predicted_f_diff {2} ".format(i_ls, f - f_lastpos, predicted_f_diff))
                 # make the step length a factor of 100 shorter
                 self.theta = 0.99*self.theta_prior_step + 0.01*self.theta
-                self.theta_proj = dot(self.P.T, self.theta)
+                self.theta_proj = self.project(self.theta)
                 # and recompute f and df at this new location
                 f, df_proj = self.f_df_wrapper(self.theta, indx)
-                df = dot(self.P, df_proj)
+                df = self.expand(df_proj)
 
             # we're done with function calls.  can move these back into the subspace.
-            df_proj = dot(self.P.T, df)
-            df_lastpos_proj = dot(self.P.T, df_lastpos)
+            df_proj = self.project(df)
+            df_lastpos_proj = self.project(df_lastpos)
 
             if f < f_lastpos:
                 # the original objective was better -- but add the newly evaluated point to the history,
                 # just so it's not a wasted function call
-                theta_lastpos_proj = dot(self.P.T, self.theta_prior_step)
+                theta_lastpos_proj = self.project(self.theta_prior_step)
                 self.update_history(indx, theta_lastpos_proj, f_lastpos, df_lastpos_proj)
                 if self.display > 2:
                     print("step failed, but last position was even worse ( f {0}, std f {1}),".format(f_lastpos, std(self.hist_f[self.eval_count>0,0]))),
@@ -856,7 +923,7 @@ class SFO(object):
                 f = f_lastpos
                 df_proj = df_lastpos_proj
                 self.theta = self.theta_prior_step
-                self.theta_proj = dot(self.P.T, self.theta)
+                self.theta_proj = self.project(self.theta)
 
         # don't let steps get so short that they don't provide any usable Hessian information
         # TODO use a more principled cutoff here
@@ -966,7 +1033,7 @@ class SFO(object):
         #         dtheta_proj /= length_ratio/ratio_scale
 
         # the update to theta, in the full dimensional space
-        dtheta = dot(self.P, dtheta_proj)
+        dtheta = self.expand(dtheta_proj)
 
         # backup the prior position, in case this is a failed step
         self.theta_prior_step = self.theta.copy()
