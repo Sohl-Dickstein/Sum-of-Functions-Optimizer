@@ -178,6 +178,12 @@ class SFO(object):
         # cyclic (subfunction_selection='cyclic')
         self.cyclic_subfunction_index = 0
 
+        if self.N < 25 and self.display > 0:
+            print(
+                "\nIn experiments, performance suffered when the data was broken up into fewer\n"
+                "than 25 minibatches (and performance saturated after about 50 minibatches).\n"
+                "See Figure 2c.  You may want to use more than the current %d minibatches.\n"%(self.N))
+
 
     def optimize(self, num_passes = 10, num_steps = None):
         """

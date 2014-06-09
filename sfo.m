@@ -229,6 +229,10 @@ classdef sfo < handle
             % the approximate Hessian for each subfunction is stored;
             % as dot(obj.b(:.:.index), obj.b(:.:.inedx).')
             obj.b = zeros(obj.K_max,2.*obj.max_history,obj.N);
+
+            if obj.N < 25 && obj.display > 0
+                fprintf( '\n\nIn experiments, performance suffered when the data was broken up into fewer\nthan 25 minibatches (and performance saturated after about 50 minibatches).\nSee Figure 2c.  You may want to use more than the current %d minibatches.\n\n', obj.N);
+            end
         end
 
 
