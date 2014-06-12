@@ -81,7 +81,7 @@ If too much time is spent inside SFO relative to inside the objective function, 
 Stochastic gradients will break SFO, because it uses the change in the minibatch/subfunction gradient to estimate the Hessian matrix.  The benefits of noise regularization can be achieved without making the gradients stochastic by using frozen noise.  That is, in the case of dropout, assign a random dropout mask to each datapoint.  Every time that datapoint is evaluated however, use the same dropout mask.  This makes the gradients consistent across multiple evaluations of the minibatch.
 
 ## Reproduce figures from paper
-To reproduce the figures from the paper, run **generate\_figures/figure\_cartoon.py**, **generate\_figures/figure\_overhead.py**, or **generate\_figures/figure\_convergence.py**.  Both **figure\_overhead.py** and **figure\_convergence.py** expect a subdirectory **figure_data/** with training data.  This can be downloaded from https://www.dropbox.com/sh/h9z4djlgl2tagmu/GlVAJyErf8.
+To reproduce the figures from the paper, run **generate\_figures/figure\_\*.py**.  Several of the figures rely on a subdirectory **figure_data/** with training data.  This can be downloaded from https://www.dropbox.com/sh/h9z4djlgl2tagmu/GlVAJyErf8 .
 
 ## Example code
 
