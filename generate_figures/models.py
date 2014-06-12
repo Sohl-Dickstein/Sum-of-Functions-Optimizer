@@ -37,6 +37,36 @@ else:
     random_choice = my_random_choice
 
 
+class toy:
+    """
+    Toy problem.  Sum of squared errors from random means, raised
+    to random powers.
+    """
+
+    def __init__(self, num_subfunctions=100, num_dims=10):
+        self.name = '||x-u||^a, a in U[1.5,4.5]'
+
+        # create the array of subfunction identifiers
+        self.subfunction_references = []
+        N = num_subfunctions
+        for i in range(N):
+            npow = np.random.rand()*3. + 1.5
+            mn = np.random.randn(num_dims,1)
+            self.subfunction_references.append([npow,mn])
+        self.full_objective_references = self.subfunction_references
+
+        ## initialize parameters
+        self.theta_init = np.random.randn(num_dims,1)
+
+    def f_df(self, x, args):
+        npow = args[0]/2.
+        mn = args[1]
+        f = np.sum(((x-mn)**2)**npow)
+        df = npow*((x-mn)**2)**(npow-1.)*2*(x-mn)
+        scl = 1. / np.prod(x.shape)
+        return f*scl, df*scl
+
+
 class Hopfield:
     def __init__(self, num_subfunctions=100, reg=1., scale_by_N=True):
         """
@@ -496,35 +526,6 @@ class CIFARConvNet(PylearnModel):
         PylearnModel.__init__(self,fn, load_cifar, num_subfunctions, num_dims)
         self.name += '_conv'
 
-
-class toy:
-    """
-    Toy problem.  Sum of squared errors from random means, raised
-    to random powers.
-    """
-
-    def __init__(self, num_subfunctions=100, num_dims=10):
-        self.name = '||x-u||^a, a in U[1.5,4.5]'
-
-        # create the array of subfunction identifiers
-        self.subfunction_references = []
-        N = num_subfunctions
-        for i in range(N):
-            npow = np.random.rand()*3. + 1.5
-            mn = np.random.randn(num_dims,1)
-            self.subfunction_references.append([npow,mn])
-        self.full_objective_references = self.subfunction_references
-
-        ## initialize parameters
-        self.theta_init = np.random.randn(num_dims,1)
-
-    def f_df(self, x, args):
-        npow = args[0]/2.
-        mn = args[1]
-        f = np.sum(((x-mn)**2)**npow)
-        df = npow*((x-mn)**2)**(npow-1.)*2*(x-mn)
-        scl = 1. / np.prod(x.shape)
-        return f*scl, df*scl
 
 class GLM:
     """

@@ -8,7 +8,7 @@ This is slower than directly calling the optimizers, because
 it periodically evaluates (and stores) the FULL objective rather
 than always evaluating only a single subfunction per update step.
 
-Designed to be used by figure_convergence.py.
+Designed to be used by figure_comparison*.py.
 
 Author: Jascha Sohl-Dickstein (2014)
 Web: http://redwood.berkeley.edu/jascha
@@ -82,6 +82,7 @@ class train:
         self.num_subfunctions = len(self.model.subfunction_references)
         self.full_objective_period = int(self.num_subfunctions/full_objective_per_pass)
 
+
     def f_df_wrapper(self, *args, **kwargs):
         """
         This (slightly hacky) function stands between the optimizer and the objective function.
@@ -129,6 +130,7 @@ class train:
 
         return f, df
 
+
     def f_df_wrapper_flattened(self, x_flat, subfunction_references, *args, **kwargs):
         """
         Calculate the subfunction objective and gradient.
@@ -147,6 +149,35 @@ class train:
             df += dfl_flat
         return f, df.ravel()
 
+
+    def SGD(self, num_passes=20):
+        """ Train model using SGD with various learning rates """
+
+        # get the number of minibatches
+        N = len(self.model.subfunction_references)
+        # step through all the hyperparameters.  eta is step length.
+        for eta in 10**np.linspace(-5,2,8):
+            # label this convergence trace using the optimizer name and hyperparameter
+            self.learner_name = "SGD %.4f"%eta
+            print("\n\n" + self.learner_name)
+
+            # initialize the parameters
+            x = self.xinit_flat.copy()
+            ## perform stochastic gradient descent
+            for _ in range(num_passes*N): # number of minibatch evaluations
+                # choose a minibatch at random
+                idx = np.random.randint(N)
+                sr = self.model.subfunction_references[idx]
+                # evaluate the objective and gradient for that minibatch
+                fl, dfl = self.f_df_wrapper_flattened(x.reshape((-1,1)), (sr,))
+                # update the parameters
+                x -= dfl.reshape(x.shape) * eta
+                # if the objective has diverged, skip the rest of the run for this hyperparameter
+                if not np.isfinite(fl):
+                    print("Non-finite subfunction.")
+                    break
+
+
     def LBFGS(self, num_passes=20):
         """ Train model using LBFGS """
 
@@ -159,6 +190,7 @@ class train:
             args=(self.model.subfunction_references, ),
             maxfun=num_passes)
 
+
     def SFO(self, num_passes=20, learner_name='SFO'):
         """ Train model using SFO."""
         self.learner_name = learner_name
@@ -168,6 +200,7 @@ class train:
         # # check the gradients
         # self.optimizer.check_grad()
         x = self.optimizer.optimize(num_passes=num_passes)
+
 
     def SFO_variations(self, num_passes=20):
         """
@@ -243,29 +276,6 @@ class train:
                 disp=1,
                 maxfun=num_steps)
 
-    def SGD(self, num_passes=20):
-        """ Train model using SGD with various learning rates """
-
-        N = len(self.model.subfunction_references)
-        for eta in 10**np.linspace(-5,2,8):
-            self.learner_name = "SGD %.4f"%eta
-            print("\n\n" + self.learner_name)
-            f = np.ones((N))*np.nan
-            x = self.xinit_flat.copy()
-            for epoch in range(num_passes):
-                for minibatch in range(N):
-                    idx = np.random.randint(N)
-                    sr = self.model.subfunction_references[idx]
-                    fl, dfl = self.f_df_wrapper_flattened(x.reshape((-1,1)), (sr,))
-                    x -= dfl.reshape(x.shape) * eta
-                    f[idx] = fl
-                    if not np.isfinite(fl):
-                        print("Non-finite subfunction.  Ending hyperparameter search.")
-                        break
-                if not np.isfinite(fl):
-                    print("Non-finite average objective function.  Ending hyperparameter search.")
-                    break
-            print(np.mean(f), "average value at last evaluation")
     
     def SGD_momentum(self, num_passes=20):
         """ Train model using SGD with various learning rates and momentums"""
