@@ -152,6 +152,13 @@ def make_plot_single_model(hist_f, hist_x_projection, hist_events, model_name,
         #styledict[nm] = {'color':'k', 'dashes':(7,nprop/(ii+1.),), 'linewidth':5.*(ii+1.)/nprop}
         styledict[nm] = {'color':(1. - ii/(nprop-1.), 0., 0.), 'ls':'-', 'linewidth':4.*(ii+1.)/nprop}
         zorder[nm] = ii
+    # SFO number history terms
+    prop = [nm for nm in hist_f.keys() if 'SFO' in nm and 'L=' in nm]
+    nprop = len(prop)
+    for ii, nm in enumerate(sorted_nicely(prop)):
+        #styledict[nm] = {'color':'k', 'dashes':(7,nprop/(ii+1.),), 'linewidth':5.*(ii+1.)/nprop}
+        styledict[nm] = {'color':(1. - ii/(nprop-1.), 0., 0.), 'ls':'-', 'linewidth':4.*(ii+1.)/nprop}
+        zorder[nm] = ii
 
     # plot the learning trace, and save pdf
     fig = plt.figure(figsize=figsize)

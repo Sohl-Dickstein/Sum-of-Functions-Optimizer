@@ -191,12 +191,12 @@ class train:
             maxfun=num_passes)
 
 
-    def SFO(self, num_passes=20, learner_name='SFO'):
+    def SFO(self, num_passes=20, learner_name='SFO', **kwargs):
         """ Train model using SFO."""
         self.learner_name = learner_name
         print("\n\n" + self.learner_name)
 
-        self.optimizer = SFO(self.f_df_wrapper, self.model.theta_init, self.model.subfunction_references)
+        self.optimizer = SFO(self.f_df_wrapper, self.model.theta_init, self.model.subfunction_references, **kwargs)
         # # check the gradients
         # self.optimizer.check_grad()
         x = self.optimizer.optimize(num_passes=num_passes)
