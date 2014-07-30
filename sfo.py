@@ -181,8 +181,8 @@ class SFO(object):
         if self.N < 25 and self.display > 0:
             print(
                 "\nIn experiments, performance suffered when the data was broken up into fewer\n"
-                "than 25 minibatches (and performance saturated after about 50 minibatches).\n"
-                "See Figure 2c.  You may want to use more than the current %d minibatches.\n"%(self.N))
+                "than 25 minibatches.  See Figure 2c in SFO paper.\n"
+                "You may want to use more than the current %d minibatches.\n"%(self.N))
 
 
     def optimize(self, num_passes = 10, num_steps = None):
@@ -206,6 +206,9 @@ class SFO(object):
             print "No optimization steps performed.  Change num_passes or num_steps."
         elif self.display > 0:
             print("active {0}/{1}, pass #{2}, sfo {3} s, func {4} s, <f> {5}".format(sum(self.active), self.active.shape[0], float(sum(self.eval_count))/self.N, self.time_pass - self.time_func, self.time_func, mean(self.hist_f[self.eval_count>0,0])))
+            if (self.time_pass - self.time_func) > self.time_func and self.N >= 25:
+                print "More time was spent in SFO than the objective function."
+                print "You may want to consider breaking your data into fewer minibatches to reduce overhead."
 
         # reverse the flattening transformation on theta
         return self.theta_flat_to_original(self.theta)
