@@ -961,8 +961,8 @@ class SFO(object):
 
         #DEBUG
         # dtheta_proj_length = sqrt(sum(dtheta_proj**2))
-        # if sum(self.eval_count) > self.N and dtheta_proj_length > 1e-20:
-        #     # only allow a step to be up to a factor of 2 longer than the
+        # if sum(self.eval_count) > self.N and dtheta_proj_length > self.eps:
+        #     # only allow a step to be up to a factor of 10 longer than the
         #     # average step length
         #     avg_length = self.total_distance / float(sum(self.eval_count))
         #     length_ratio = dtheta_proj_length / avg_length
