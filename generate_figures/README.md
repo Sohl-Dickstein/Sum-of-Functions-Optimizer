@@ -18,7 +18,8 @@ To include a new objective function in the convergence comparison figure:
 
 1.  Add a class to **models.py** which provides the objective function and gradient, and initialization, for the new objective.  The *toy* class is a good template to modify.
 2.  Add the new objective class to *models_to_train* in **figure_compare_optimizers.py**.
-3.  Run **figure_compare_optimizers.py**.
+3.  (optional) Modify plot characteristics in *make_plot_single_model* in **convergence_utils.py**.
+4.  Run **figure_compare_optimizers.py**.
 
 To include a new optimizer in the convergence comparison figure:
 
@@ -28,3 +29,5 @@ To include a new optimizer in the convergence comparison figure:
 4.  Run **figure_compare_optimizers.py**.
 
 For more documentation on SFO in general, see the README.md in the parent directory.
+
+Several of the figures rely on a subdirectory **figure_data/** with training data.  This can be downloaded from https://www.dropbox.com/sh/h9z4djlgl2tagmu/GlVAJyErf8 .
