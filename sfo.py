@@ -248,6 +248,47 @@ class SFO(object):
             print
 
 
+    def replace_subfunction(self, idx, keep_history=False, new_reference=None):
+        """
+        Reset the history for the subfunction indicated by idx.  This could be used
+        e.g. to apply SFO in an online fashion, where this function is used to refresh
+        the data in minibatches.
+
+        Parameters:
+            idx - The subfunction number to replace (0 <= idx < # subfunctions)
+            keep_history - Set this to True to keep the history of gradient and iterate
+                updates, and only replace the most recent position and gradient so that
+                future updates are based on the new subfunction.
+            new_reference - If specified, the subfunction_reference that is passed
+                to the objective function will be replaced with this value.
+                new_reference could for instance hold a new minibatch of training data.
+        """
+
+        if not new_reference is None:
+            # if a new one has been supplied, then
+            # replace the reference for this subfunction
+            self.sub_ref[idx] = new_reference
+
+        if not keep_history:
+            # destroy the history of delta-gradients and delta-positions for this subfunction
+            self.hist_deltatheta[:,:,idx] = 0.
+            self.hist_deltadf[:,:,indx]
+
+        # evaluate this subfunction at the last location
+        # (use the last location, to avoid weird interactions with rejected updates)
+        f, df_proj = self.f_df_wrapper(self.theta_prior_step, idx)
+        # replace the last function, gradient, and position with the one just
+        # measured.  set skip_delta so that the change in gradient over 
+        # the change in subfunction is not used.
+        theta_lastpos_proj = dot(self.P.T, self.theta_prior_step)
+        update_history(self, idx, theta_lastpos_proj, f, df_proj, skip_delta=True)
+
+
+        # subtract out the current contribution of this subfunction from the full Hessian
+        # NOTE we have not reset the digaonal
+        # add the contribution of this subfunction back in to the full Hessian
+
+
     def apply_subspace_transformation(self,T_left,T_right):
         """
         Apply change-of-subspace transformation.  This function is called when
@@ -420,14 +461,14 @@ class SFO(object):
         return f_pred
 
 
-    def update_history(self, indx, theta_proj, f, df_proj):
+    def update_history(self, indx, theta_proj, f, df_proj, skip_delta=False):
         """
         Update history of position differences and gradient differences
         for subfunction indx.
         """
         # there needs to be at least one earlier measurement from this
         # subfunction to compute position and gradient differences.
-        if self.eval_count[indx] > 1:
+        if self.eval_count[indx] > 1 and not skip_delta:
             # differences in gradient and position
             ddf = df_proj - self.last_df[:,[indx]]
             ddt = theta_proj - self.last_theta[:,[indx]]
@@ -612,6 +653,11 @@ class SFO(object):
             # TODO(jascha) error checking here
             return [asarray(theta_original).reshape((1,)),]
     def theta_list_to_original_recurse(self, theta_list, theta_original):
+        """
+        Recursively convert from a list of numpy arrays into the original parameter format.
+        
+        Use theta_list_to_original() instead of calling this function directly.
+        """
         if isinstance(theta_original, list) or isinstance(theta_original, tuple):
             theta_new = []
             for theta_element in theta_original:
@@ -834,7 +880,7 @@ class SFO(object):
 
             for i_ls in range(10):
                 if f - f_lastpos < 10.*predicted_f_diff:
-                    # the failed update is already with an order of magnitude
+                    # the failed update is already within an order of magnitude
                     # of the target update value -- no backoff required
                     break
                 if self.display > 4:
