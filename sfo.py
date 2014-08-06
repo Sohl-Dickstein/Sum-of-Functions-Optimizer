@@ -220,6 +220,9 @@ class SFO(object):
         checks the subfunctions in random order, and the dimensions of each
         subfunction in random order.  This way, a representitive set of
         gradients can be checked quickly, even for high dimensional objectives.
+
+        small_diff specifies the size of the step size used for finite difference
+        comparison.
         """
 
         if small_diff is None:
@@ -237,7 +240,9 @@ class SFO(object):
                 fl2, _ = self.f_df_wrapper(self.theta + ep, i, return_full=True)
                 dfl_obs[j] = (fl2 - fl)/small_diff
                 dfl_err[j] = dfl_obs[j] - dfl[j]
-                if abs(dfl_err[j]) > small_diff * 1e4:
+                if not isfinite(dfl_err[j]):
+                    print("non-finite "),
+                elif abs(dfl_err[j]) > small_diff * 1e4:
                     print("large diff "),
                 else:
                     print("           "),
@@ -732,11 +737,11 @@ class SFO(object):
         Convert from the original parameter format into a 1d array.
         """
         return self.theta_list_to_flat(self.theta_original_to_list(theta_original))
-    def theta_flat_to_original(self, theta_original):
+    def theta_flat_to_original(self, theta_flat):
         """
         Convert from a 1d array into the original parameter format.
         """
-        return self.theta_list_to_original(self.theta_flat_to_list(theta_original))
+        return self.theta_list_to_original(self.theta_flat_to_list(theta_flat))
 
 
     def f_df_wrapper(self, theta_in, idx, return_full=False):
