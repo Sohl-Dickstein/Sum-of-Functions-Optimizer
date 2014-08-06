@@ -272,7 +272,7 @@ class SFO(object):
         if not keep_history:
             # destroy the history of delta-gradients and delta-positions for this subfunction
             self.hist_deltatheta[:,:,idx] = 0.
-            self.hist_deltadf[:,:,indx]
+            self.hist_deltadf[:,:,idx]
 
         # evaluate this subfunction at the last location
         # (use the last location, to avoid weird interactions with rejected updates)
@@ -281,12 +281,7 @@ class SFO(object):
         # measured.  set skip_delta so that the change in gradient over 
         # the change in subfunction is not used.
         theta_lastpos_proj = dot(self.P.T, self.theta_prior_step)
-        update_history(self, idx, theta_lastpos_proj, f, df_proj, skip_delta=True)
-
-
-        # subtract out the current contribution of this subfunction from the full Hessian
-        # NOTE we have not reset the digaonal
-        # add the contribution of this subfunction back in to the full Hessian
+        self.update_history(idx, theta_lastpos_proj, f, df_proj, skip_delta=True)
 
 
     def apply_subspace_transformation(self,T_left,T_right):
