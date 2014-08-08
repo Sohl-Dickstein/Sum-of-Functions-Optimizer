@@ -274,6 +274,10 @@ class SFO(object):
             # replace the reference for this subfunction
             self.sub_ref[idx] = new_reference
 
+        if self.eval_count[idx] < 1:
+            # subfunction not active yet -- no history
+            return
+
         if not keep_history:
             # destroy the history of delta-gradients and delta-positions for this subfunction
             self.hist_deltatheta[:,:,idx] = 0.
