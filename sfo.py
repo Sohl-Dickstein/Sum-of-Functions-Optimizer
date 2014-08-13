@@ -617,11 +617,9 @@ class SFO(object):
             if self.display > 3:
                 print("no positive eigenvalues after BFGS"),
         # set any too-small eigenvalues to the median positive
-        # eigenvalue, or to their absolute value if that's larger
+        # eigenvalue
         U_median = median(U[U>0])
-        idx_too_small = flatnonzero((U<(max(abs(U))/self.hess_max_dev)))
-        if len(idx_too_small) > 0:
-            U[idx_too_small] = max(hstack((abs(U[idx_too_small]), U_median*ones(U[idx_too_small].shape))), axis=1).ravel()
+        U[(U<(max(abs(U))/self.hess_max_dev))] = U_median
 
         # the Hessian after it's been forced to be positive definite
         H_posdef = dot(V*U, V.T)
