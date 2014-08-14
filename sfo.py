@@ -6,10 +6,11 @@ Attribution-Noncommercial License.
 """
 
 #from __future__ import print_function
-from numpy import *
+# from numpy import *
+import numpy as np
 from random import shuffle
 from collections import defaultdict
-import scipy.linalg
+
 import time
 import warnings
 
@@ -88,7 +89,7 @@ class SFO(object):
         self.M = self.theta.shape[0]
         subspace_dimensionality = 2*self.N+2  # 2 to include current location
         # subspace can't be larger than the full space
-        subspace_dimensionality = int(min([subspace_dimensionality, self.M]))
+        subspace_dimensionality = int(np.min([subspace_dimensionality, self.M]))
         # the update steps will be rescaled by this
         self.step_scale = 1.
         # "very small" for various tasks, most importantly identifying when
@@ -98,15 +99,15 @@ class SFO(object):
 
         # the min and max dimenstionality for the subspace
         self.K_min = subspace_dimensionality
-        self.K_max = ceil(self.K_min*1.5)
-        self.K_max = int(min([self.K_max, self.M]))
+        self.K_max = np.ceil(self.K_min*1.5)
+        self.K_max = int(np.min([self.K_max, self.M]))
         # self.P holds the subspace
-        self.P = zeros((self.M,self.K_max))
+        self.P = np.zeros((self.M,self.K_max))
 
         # store the minimum and maximum eigenvalue from each approximate
         # Hessian
-        self.min_eig_sub = zeros((self.N))
-        self.max_eig_sub = zeros((self.N))
+        self.min_eig_sub = np.zeros((self.N))
+        self.max_eig_sub = np.zeros((self.N))
 
         # store the total time spent in optimization, and the amount of time
         # spent in the objective function
@@ -117,8 +118,8 @@ class SFO(object):
         self.iter_since_active_growth = 0
 
         # which subfunctions are active
-        self.active = zeros((self.N)).astype(bool)
-        inds = random.permutation(self.N)[:init_subf]
+        self.active = np.zeros((self.N)).astype(bool)
+        inds = np.random.permutation(self.N)[:init_subf]
         self.active[inds] = True
         self.min_eig_sub[inds] = hessian_init
         self.max_eig_sub[inds] = hessian_init
@@ -126,50 +127,50 @@ class SFO(object):
         # the total path length traveled during optimization
         self.total_distance = 0.
         # number of function evaluations for each subfunction
-        self.eval_count = zeros((self.N))
+        self.eval_count = np.zeros((self.N))
 
         # the current dimensionality of the subspace
         self.K_current = 1
         # set the first column of the subspace to be the initial
         # theta
-        rr = sqrt(sum(self.theta**2))
+        rr = np.sqrt(np.sum(self.theta**2))
         if rr > 0:
             self.P[:,[0]] = self.theta/rr
         else:
             # initial theta is 0 -- initialize randomly
-            self.P[:,[0]] = random.randn(self.theta.shape[0],1)
-            self.P[:,[0]] /= sqrt(sum(self.P[:,[0]]**2))
+            self.P[:,[0]] = np.random.randn(self.theta.shape[0],1)
+            self.P[:,[0]] /= np.sqrt(np.sum(self.P[:,[0]]**2))
 
         if self.M == self.K_max:
             # if the subspace spans the full space, then just make
             # P the identity matrix
             if self.display > 1:
                 print("subspace spans full space"),
-            self.P = eye(self.M)
+            self.P = np.eye(self.M)
             self.K_current = self.M+1
 
         # theta projected into current working subspace
-        self.theta_proj = dot(self.P.T, self.theta)
+        self.theta_proj = np.dot(self.P.T, self.theta)
         # holds the last position and the last gradient for all the objective functions
-        self.last_theta = tile(self.theta_proj, ((1,self.N)))
-        self.last_df = zeros((self.K_max,self.N))
+        self.last_theta = np.tile(self.theta_proj, ((1,self.N)))
+        self.last_df = np.zeros((self.K_max,self.N))
         # the history of theta changes for each subfunction
-        self.hist_deltatheta = zeros((self.K_max,max_history_terms,self.N))
+        self.hist_deltatheta = np.zeros((self.K_max,max_history_terms,self.N))
         # the history of gradient changes for each subfunction
-        self.hist_deltadf = zeros((self.K_max,max_history_terms,self.N))
+        self.hist_deltadf = np.zeros((self.K_max,max_history_terms,self.N))
         # the history of function values for each subfunction
-        self.hist_f = ones((self.N, max_history_terms))*nan
+        self.hist_f = np.ones((self.N, max_history_terms))*np.nan
         # a flat history of all returned subfunction values for debugging/diagnostics
         self.hist_f_flat = []
 
         # the approximate Hessian for each subfunction is stored
-        # as dot(self.b[:.:.index], self.b[:.:.inedx].T)
-        self.b = zeros((self.K_max,2*self.max_history,self.N)).astype(complex)
+        # as np.dot(self.b[:.:.index], self.b[:.:.inedx].T)
+        self.b = np.zeros((self.K_max,2*self.max_history,self.N)).astype(complex)
         # TODO(jascha) self.b could be real if another diagonal term carrying sign
         # information was introduced
 
         # the full Hessian (sum over all the subfunctions)
-        self.full_H = zeros((self.K_max,self.K_max))
+        self.full_H = np.zeros((self.K_max,self.K_max))
 
         # holds diagnostic information (eg, step failure, when the subspace is collapsed)
         self.events = dict()
@@ -198,14 +199,14 @@ class SFO(object):
             num_steps = int(num_passes*self.N)
         for i in range(num_steps):
             if self.display > 1:
-                print("pass {0}, step {1},".format(float(sum(self.eval_count))/self.N, i)),
+                print("pass {0}, step {1},".format(float(np.sum(self.eval_count))/self.N, i)),
             self.optimization_step()
             if self.display > 1:
-                print("active {0}/{1}, sfo time {2} s, func time {3} s, f {4}, <f> {5}".format(sum(self.active), self.active.shape[0], self.time_pass - self.time_func, self.time_func, self.hist_f_flat[-1], mean(self.hist_f[self.eval_count>0,0])))
+                print("active {0}/{1}, sfo time {2} s, func time {3} s, f {4}, <f> {5}".format(np.sum(self.active), self.active.shape[0], self.time_pass - self.time_func, self.time_func, self.hist_f_flat[-1], np.mean(self.hist_f[self.eval_count>0,0])))
         if num_steps < 1:
             print "No optimization steps performed.  Change num_passes or num_steps."
         elif self.display > 0:
-            print("active {0}/{1}, pass #{2}, sfo {3} s, func {4} s, <f> {5}".format(sum(self.active), self.active.shape[0], float(sum(self.eval_count))/self.N, self.time_pass - self.time_func, self.time_func, mean(self.hist_f[self.eval_count>0,0])))
+            print("active {0}/{1}, pass #{2}, sfo {3} s, func {4} s, <f> {5}".format(np.sum(self.active), self.active.shape[0], float(np.sum(self.eval_count))/self.N, self.time_pass - self.time_func, self.time_func, np.mean(self.hist_f[self.eval_count>0,0])))
             if (self.time_pass - self.time_func) > self.time_func and self.N >= 25 and self.time_pass > 60:
                 print "More time was spent in SFO than the objective function."
                 print "You may want to consider breaking your data into fewer minibatches to reduce overhead."
@@ -230,25 +231,25 @@ class SFO(object):
             small_diff = self.eps*1e6
         print "Testing step size %g"%small_diff
 
-        for i in random.permutation(range(self.N)):
+        for i in np.random.permutation(range(self.N)):
             fl, dfl = self.f_df_wrapper(self.theta, i, return_full=True)
-            ep = zeros((self.M,1))
-            dfl_obs = zeros((self.M,1))
-            dfl_err = zeros((self.M,1))
-            for j in random.permutation(range(self.M)):
+            ep = np.zeros((self.M,1))
+            dfl_obs = np.zeros((self.M,1))
+            dfl_err = np.zeros((self.M,1))
+            for j in np.random.permutation(range(self.M)):
                 ep[j] = small_diff
                 fl2, _ = self.f_df_wrapper(self.theta + ep, i, return_full=True)
                 dfl_obs[j] = (fl2 - fl)/small_diff
                 dfl_err[j] = dfl_obs[j] - dfl[j]
-                if not isfinite(dfl_err[j]):
+                if not np.isfinite(dfl_err[j]):
                     print("non-finite "),
-                elif abs(dfl_err[j]) > small_diff * 1e4:
+                elif np.abs(dfl_err[j]) > small_diff * 1e4:
                     print("large diff "),
                 else:
                     print("           "),
                 print("  gradient subfunction {0}, dimension {1}, analytic {2}, finite diff {3}, error {4}".format(i, j, dfl[j], dfl_obs[j], dfl_err[j]))
                 ep[j] = 0.
-            gerr = sqrt(sum((dfl - dfl_obs)**2))
+            gerr = np.sqrt(np.sum((dfl - dfl_obs)**2))
             print("subfunction {0}, total L2 gradient error {1}".format(i, gerr))
             print
 
@@ -289,7 +290,7 @@ class SFO(object):
         # replace the last function, gradient, and position with the one just
         # measured.  set skip_delta so that the change in gradient over 
         # the change in subfunction is not used.
-        theta_lastpos_proj = dot(self.P.T, self.theta_prior_step)
+        theta_lastpos_proj = np.dot(self.P.T, self.theta_prior_step)
         self.update_history(idx, theta_lastpos_proj, f, df_proj, skip_delta=True)
 
 
@@ -310,41 +311,41 @@ class SFO(object):
         tt = T_left.shape[0]
 
         # project history terms into new subspace
-        self.last_df = dot(T_right.T, self.last_df)
-        self.last_theta = dot(T_left, self.last_theta)
-        self.hist_deltadf = dot(T_right.T, self.hist_deltadf.reshape((ss,-1))).reshape((tt,-1,self.N))
-        self.hist_deltatheta = dot(T_left, self.hist_deltatheta.reshape((ss,-1))).reshape((tt,-1,self.N))
+        self.last_df = np.dot(T_right.T, self.last_df)
+        self.last_theta = np.dot(T_left, self.last_theta)
+        self.hist_deltadf = np.dot(T_right.T, self.hist_deltadf.reshape((ss,-1))).reshape((tt,-1,self.N))
+        self.hist_deltatheta = np.dot(T_left, self.hist_deltatheta.reshape((ss,-1))).reshape((tt,-1,self.N))
         # project stored hessian for each subfunction in to new subspace
-        self.b = dot(T_right.T, self.b.reshape((ss,-1))).reshape((tt,2*self.max_history,self.N))
+        self.b = np.dot(T_right.T, self.b.reshape((ss,-1))).reshape((tt,2*self.max_history,self.N))
 
         # # project stored full hessian in to new subspace
         # # TODO recompute full hessian from scratch to avoid accumulating numerical errors?
-        # self.full_H = dot(T_right.T, self.full_H)
-        # self.full_H = dot(T_right.T, self.full_H.T).T
+        # self.full_H = np.dot(T_right.T, self.full_H)
+        # self.full_H = np.dot(T_right.T, self.full_H.T).T
         # # project low dimensional representation of current theta in to new subspace
-        # self.theta_proj = dot(T_left, self.theta_proj)
+        # self.theta_proj = np.dot(T_left, self.theta_proj)
 
         ## To avoid slow accumulation of numerical errors, recompute full_H
         ## and theta_proj when the subspace is collapsed.  Should not be a
         ## leading time cost.
         # theta projected into current working subspace
-        self.theta_proj = dot(self.P.T, self.theta)
+        self.theta_proj = np.dot(self.P.T, self.theta)
         # full approximate hessian
-        self.full_H = real(dot(self.b.reshape((ss,-1)), self.b.reshape((ss,-1)).T))
+        self.full_H = np.real(np.dot(self.b.reshape((ss,-1)), self.b.reshape((ss,-1)).T))
 
 
     def reorthogonalize_subspace(self):
         # check if the subspace has become non-orthogonal
-        subspace_eigs, _ = linalg.eigh(dot(self.P.T, self.P))
+        subspace_eigs, _ = np.linalg.eigh(np.dot(self.P.T, self.P))
         # TODO(jascha) this may be a stricter cutoff than we need
-        if max(subspace_eigs) <= 1 + self.eps:
+        if np.max(subspace_eigs) <= 1 + self.eps:
             return
 
         if self.display > 2:
             print("Subspace has become non-orthogonal.  Performing QR.\n")
-        Porth, _ = linalg.qr(self.P[:,:self.K_current])
-        Pl = zeros((self.K_max, self.K_max))
-        Pl[:,:self.K_current] = dot(self.P.T, Porth)
+        Porth, _ = np.linalg.qr(self.P[:,:self.K_current])
+        Pl = np.zeros((self.K_max, self.K_max))
+        Pl[:,:self.K_current] = np.dot(self.P.T, Porth)
         # update the subspace;
         self.P[:,:self.K_current] = Porth
         # Pl is the projection matrix from old to new basis.  apply it to all the history
@@ -365,22 +366,22 @@ class SFO(object):
             print("collapsing subspace"),
 
         # the projection matrix from old to new subspace
-        Pl = zeros((self.K_max,self.K_max))
+        Pl = np.zeros((self.K_max,self.K_max))
 
         # yy will hold all the directions to pack into the subspace.
         # initialize it with random noise, so that it still spans K_min
         # dimensions even if not all the subfunctions are active yet
-        yy = random.randn(self.K_max,self.K_min)
+        yy = np.random.randn(self.K_max,self.K_min)
         if xl == None:
-            xl = random.randn(self.K_max,1)
+            xl = np.random.randn(self.K_max,1)
         # the most recent position and gradient for all active subfunctions,
         # as well as the current position and gradient (which will not be saved in the history yet)
-        yz = hstack((self.last_df[:,self.active], self.last_theta[:,self.active], xl, dot(self.P.T,self.theta)))
+        yz = np.hstack((self.last_df[:,self.active], self.last_theta[:,self.active], xl, np.dot(self.P.T,self.theta)))
         yy[:,:yz.shape[1]] = yz
-        Pl[:,:self.K_min] = linalg.qr(yy)[0]
+        Pl[:,:self.K_min] = np.linalg.qr(yy)[0]
 
         # update the subspace
-        self.P = dot(self.P, Pl)
+        self.P = np.dot(self.P, Pl)
 
         # Pl is the projection matrix from old to new basis.  apply it to all the history
         # terms
@@ -401,10 +402,10 @@ class SFO(object):
         if self.K_current >= self.M:
             # no need to update the subspace if it spans the full space
             return
-        if sum(~isfinite(x_in)) > 0:
+        if np.sum(~np.isfinite(x_in)) > 0:
             # bad vector!  bail.
             return
-        x_in_length = sqrt(sum(x_in**2))
+        x_in_length = np.sqrt(np.sum(x_in**2))
         if x_in_length < self.eps:
             # if the new vector is too short, nothing to do
             return
@@ -414,8 +415,8 @@ class SFO(object):
         # Find the component of x pointing out of the existing subspace.
         # We need to do this multiple times for numerical stability.
         for i in range(3):
-            xnew -= dot(self.P, dot(self.P.T, xnew))
-            ss = sqrt(sum(xnew**2))
+            xnew -= np.dot(self.P, np.dot(self.P.T, xnew))
+            ss = np.sqrt(np.sum(xnew**2))
             if ss < self.eps:
                 # it barely points out of the existing subspace
                 # no need to add a new direction to the subspace
@@ -438,7 +439,7 @@ class SFO(object):
             self.events['collapse subspace'] = True
             # xl may not be in the history yet, so we pass it in explicitly to make
             # sure it's used
-            xl = dot(self.P.T, x_in)
+            xl = np.dot(self.P.T, x_in)
             self.collapse_subspace(xl=xl)
 
 
@@ -447,7 +448,7 @@ class SFO(object):
         Get the full approximate Hessian, including the diagonal terms.
         (note that self.full_H is stored without including the diagonal terms)
         """
-        full_H_combined = self.full_H + eye(self.K_max)*sum(self.min_eig_sub[self.active])
+        full_H_combined = self.full_H + np.eye(self.K_max)*np.sum(self.min_eig_sub[self.active])
         return full_H_combined
 
 
@@ -457,11 +458,11 @@ class SFO(object):
         (where theat_proj is in the subspace)
         """
         dtheta = theta_proj - self.last_theta[:,[indx]]
-        bdtheta = dot(self.b[:,:,indx].T, dtheta)
-        Hdtheta = real(dot(self.b[:,:,indx], bdtheta))
+        bdtheta = np.dot(self.b[:,:,indx].T, dtheta)
+        Hdtheta = np.real(np.dot(self.b[:,:,indx], bdtheta))
         Hdtheta += dtheta*self.min_eig_sub[indx] # the diagonal contribution
         # df_pred = self.last_df[:,[indx]] + Hdtheta
-        f_pred = self.hist_f[indx,0] + dot(self.last_df[:,[indx]].T, dtheta)[0,0] + 0.5*dot(dtheta.T, Hdtheta)[0,0]
+        f_pred = self.hist_f[indx,0] + np.dot(self.last_df[:,[indx]].T, dtheta)[0,0] + 0.5*np.dot(dtheta.T, Hdtheta)[0,0]
         return f_pred
 
 
@@ -477,10 +478,10 @@ class SFO(object):
             ddf = df_proj - self.last_df[:,[indx]]
             ddt = theta_proj - self.last_theta[:,[indx]]
             # length of gradient and position change vectors
-            lddt = sqrt(sum(ddt**2))
-            lddf = sqrt(sum(ddf**2))
+            lddt = np.sqrt(np.sum(ddt**2))
+            lddf = np.sqrt(np.sum(ddf**2))
 
-            corr_ddf_ddt = dot(ddf.T, ddt)[0,0]/(lddt*lddf)
+            corr_ddf_ddt = np.dot(ddf.T, ddt)[0,0]/(lddt*lddf)
 
             if self.display > 3 and corr_ddf_ddt < 0:
                 print("Warning!  Negative dgradient dtheta inner product.  Adding it anyway."),            
@@ -490,12 +491,12 @@ class SFO(object):
             elif lddf < self.eps:
                 if self.display > 2:
                     print("Largest change in gradient too small ({0}).  Not adding to history.".format(lddf))
-            elif abs(corr_ddf_ddt) < self.eps:
+            elif np.abs(corr_ddf_ddt) < self.eps:
                 if self.display > 2:
                     print("Inner product between dgradient and dtheta too small ({0}).  Not adding to history.".format(corr_ddf_ddt))
             else:
                 if self.display > 3:
-                    print("subf ||dtheta|| {0}, subf ||ddf|| {1}, corr(ddf,dtheta) {2},".format(lddt, lddf, sum(ddt*ddf)/(lddt*lddf))),
+                    print("subf ||dtheta|| {0}, subf ||ddf|| {1}, corr(ddf,dtheta) {2},".format(lddt, lddf, np.sum(ddt*ddf)/(lddt*lddf))),
 
                 # shift the history by one timestep
                 self.hist_deltatheta[:,1:,indx] = self.hist_deltatheta[:,:-1,indx]
@@ -517,7 +518,7 @@ class SFO(object):
         indx - The index of the target subfunction for Hessian update.
         """
 
-        gd = flatnonzero(sum(self.hist_deltatheta[:,:,indx]**2, axis=0)>0)
+        gd = np.flatnonzero(np.sum(self.hist_deltatheta[:,:,indx]**2, axis=0)>0)
         num_gd = len(gd)
         if num_gd == 0:
             # if no history, initialize with the median eigenvalue from full Hessian
@@ -525,21 +526,21 @@ class SFO(object):
                 print(" no history "),
             self.b[:,:,indx] = 0.
             H = self.get_full_H_with_diagonal()
-            U, V = linalg.eigh(H)
-            self.min_eig_sub[indx] = median(U)/sum(self.active)
+            U, V = np.linalg.eigh(H)
+            self.min_eig_sub[indx] = np.median(U)/np.sum(self.active)
             self.max_eig_sub[indx] = self.min_eig_sub[indx]
             if self.eval_count[indx] > 2:
-                if self.display > 2 or sum(self.eval_count) < 5:
+                if self.display > 2 or np.sum(self.eval_count) < 5:
                     print("Subfunction evaluated %d times, but has no stored history."%self.eval_count[indx])
-                if sum(self.eval_count) < 5:
+                if np.sum(self.eval_count) < 5:
                     print("You probably need to initialize SFO with a smaller hessian_init value.  Scaling down the Hessian to try to recover.  You're better off correcting the hessian_init value though!")
                     self.min_eig_sub[indx] /= 10.
             return
 
         # work in the subspace defined by this subfunction's history for this
-        P_hist, _ = linalg.qr(hstack((self.hist_deltatheta[:,gd,indx],self.hist_deltadf[:,gd,indx])))
-        deltatheta_P = dot(P_hist.T, self.hist_deltatheta[:,gd,indx])
-        deltadf_P = dot(P_hist.T, self.hist_deltadf[:,gd,indx])
+        P_hist, _ = np.linalg.qr(np.hstack((self.hist_deltatheta[:,gd,indx],self.hist_deltadf[:,gd,indx])))
+        deltatheta_P = np.dot(P_hist.T, self.hist_deltatheta[:,gd,indx])
+        deltadf_P = np.dot(P_hist.T, self.hist_deltadf[:,gd,indx])
 
         ## get an approximation to the smallest eigenvalue.
         ## This will be used as the diagonal initialization for BFGS.
@@ -547,25 +548,25 @@ class SFO(object):
         # smallest eigenvalue.
         # df = H dx
         # df^T df = dx^T H^T H dx = dx^T H^2 dx
-        pdelthet = linalg.pinv(deltatheta_P)
-        dd = dot(deltadf_P, pdelthet)
-        H2 = dot(dd.T, dd)
-        H2w, _ = linalg.eigh(H2)
-        H2w = sqrt(abs(H2w))
+        pdelthet = np.linalg.pinv(deltatheta_P)
+        dd = np.dot(deltadf_P, pdelthet)
+        H2 = np.dot(dd.T, dd)
+        H2w, _ = np.linalg.eigh(H2)
+        H2w = np.sqrt(np.abs(H2w))
 
         # only the top ~ num_gd eigenvalues are expected to be well defined
-        H2w = sort(H2w)[-num_gd:]
+        H2w = np.sort(H2w)[-num_gd:]
 
-        if min(H2w) == 0 or sum(~isfinite(H2w)) > 0:
+        if np.min(H2w) == 0 or np.sum(~np.isfinite(H2w)) > 0:
             # there was a failure using this history.  either deltadf was
             # degenerate (0 case), or deltatheta was (non-finite case).
             # Initialize using other subfunctions
-            H2w[:] = max(self.min_eig_sub[self.active])
+            H2w[:] = np.max(self.min_eig_sub[self.active])
             if self.display > 3:
                 print("Ill-conditioned history of gradient changes.  This may be because your gradient is wrong or has poor numerical precision.  Try calling SFO.check_grad()."),
 
-        self.min_eig_sub[indx] = min(H2w)
-        self.max_eig_sub[indx] = max(H2w)
+        self.min_eig_sub[indx] = np.min(H2w)
+        self.max_eig_sub[indx] = np.max(H2w)
 
         if self.min_eig_sub[indx] < self.max_eig_sub[indx]/self.hess_max_dev:
             # constrain using allowed ratio
@@ -576,26 +577,26 @@ class SFO(object):
         ## recalculate Hessian
         # number of history terms
         num_hist = deltatheta_P.shape[1]
-        # the new hessian will be dot(b_p, b_p.T) + eye()*self.min_eig_sub[indx]
-        b_p = zeros((P_hist.shape[1], num_hist*2)).astype(complex)
+        # the new hessian will be np.dot(b_p, b_p.T) + np.eye()*self.min_eig_sub[indx]
+        b_p = np.zeros((P_hist.shape[1], num_hist*2)).astype(complex)
         # step through the history
         for hist_i in reversed(range(num_hist)):
             s = deltatheta_P[:,[hist_i]].astype(complex)
             y = deltadf_P[:,[hist_i]].astype(complex)
 
             # for numerical stability
-            rscl = sqrt(sum(s**2))
+            rscl = np.sqrt(np.sum(s**2))
             s = s.copy()/rscl
             y = y.copy()/rscl
 
-            Hs = s*self.min_eig_sub[indx] + dot(b_p, dot(b_p.T, s))
+            Hs = s*self.min_eig_sub[indx] + np.dot(b_p, np.dot(b_p.T, s))
 
             if self.hessian_algorithm == 'bfgs':
-                term1 = y / sqrt(sum(y*s))
-                sHs = sum(s*Hs)
-                term2 = sqrt(complex(-1.)) * Hs / sqrt(sHs)
-                if sum(~isfinite(term1)) > 0 or sum(~isfinite(term2)) > 0:
-                    self.min_eig_sub[indx] = max(H2w)
+                term1 = y / np.sqrt(np.sum(y*s))
+                sHs = np.sum(s*Hs)
+                term2 = np.sqrt(complex(-1.)) * Hs / np.sqrt(sHs)
+                if np.sum(~np.isfinite(term1)) > 0 or np.sum(~np.isfinite(term2)) > 0:
+                    self.min_eig_sub[indx] = np.max(H2w)
                     if self.display > 1:
                         print("invalid bfgs history term.  should never get here!")
                     continue
@@ -603,14 +604,14 @@ class SFO(object):
                 b_p[:,[2*hist_i]] = term2
             elif self.hessian_algorithm == 'rank1':
                 diff = y - Hs
-                b_p[:,[hist_i]] = diff/sqrt(sum(s*diff))
+                b_p[:,[hist_i]] = diff/np.sqrt(np.sum(s*diff))
             else:
                 raise(Exception("invalid Hessian update algorithm"))
 
-        H = real(dot(b_p, b_p.T)) + eye(b_p.shape[0])*self.min_eig_sub[indx]
+        H = np.real(np.dot(b_p, b_p.T)) + np.eye(b_p.shape[0])*self.min_eig_sub[indx]
         # constrain it to be positive definite
-        U, V = linalg.eigh(H)
-        if max(U) <= 0.:
+        U, V = np.linalg.eigh(H)
+        if np.max(U) <= 0.:
             # if there aren't any positive eigenvalues, then
             # set them all to be the same conservative diagonal value
             U[:] = self.max_eig_sub[indx]
@@ -618,18 +619,18 @@ class SFO(object):
                 print("no positive eigenvalues after BFGS"),
         # set any too-small eigenvalues to the median positive
         # eigenvalue
-        U_median = median(U[U>0])
-        U[(U<(max(abs(U))/self.hess_max_dev))] = U_median
+        U_median = np.median(U[U>0])
+        U[(U<(np.max(np.abs(U))/self.hess_max_dev))] = U_median
 
         # the Hessian after it's been forced to be positive definite
-        H_posdef = dot(V*U, V.T)
+        H_posdef = np.dot(V*U, V.T)
         # now break it apart into matrices b and a diagonal term again
-        B_pos = H_posdef - eye(b_p.shape[0])*self.min_eig_sub[indx]
-        U, V = linalg.eigh(B_pos)
-        b_p = V*sqrt(U.reshape((1,-1)).astype(complex))
+        B_pos = H_posdef - np.eye(b_p.shape[0])*self.min_eig_sub[indx]
+        U, V = np.linalg.eigh(B_pos)
+        b_p = V*np.sqrt(U.reshape((1,-1)).astype(complex))
 
         self.b[:,:,indx] = 0.
-        self.b[:,:b_p.shape[1],indx] = dot(P_hist, b_p)
+        self.b[:,:b_p.shape[1],indx] = np.dot(P_hist, b_p)
 
         return
 
@@ -640,7 +641,7 @@ class SFO(object):
         The original format can be a numpy array, or a dictionary of numpy arrays,
         or a list of numpy arrays, or any nested variation thereof.
         """
-        if isinstance(theta_original, ndarray):
+        if isinstance(theta_original, np.ndarray):
             return [theta_original,]
         elif isinstance(theta_original, list) or isinstance(theta_original, tuple):
             theta_list = []
@@ -665,7 +666,7 @@ class SFO(object):
         if isinstance(theta_original, list) or isinstance(theta_original, tuple):
             theta_new = []
             for theta_element in theta_original:
-                if isinstance(theta_element, ndarray):
+                if isinstance(theta_element, np.ndarray):
                     theta_new.append(theta_list[0])
                     theta_list = theta_list[1:]
                 elif isinstance(theta_element, dict) or \
@@ -682,7 +683,7 @@ class SFO(object):
             theta_dict = dict()
             for key in sorted(theta_original.keys()):
                 theta_element = theta_original[key]
-                if isinstance(theta_element, ndarray):
+                if isinstance(theta_element, np.ndarray):
                     theta_dict[key] = theta_list[0]
                     theta_list = theta_list[1:]
                 elif isinstance(theta_element, dict) or \
@@ -701,7 +702,7 @@ class SFO(object):
         """
         Convert from a list of numpy arrays into the original parameter format.
         """
-        if isinstance(self.theta_original, ndarray):
+        if isinstance(self.theta_original, np.ndarray):
             return theta_list[0]
         else:
             # we do this recursively to handle nested arrays or dictionaries of parameters
@@ -714,11 +715,11 @@ class SFO(object):
         """
         num_el = 0
         for el in theta_list:
-            num_el += prod(el.shape)
-        theta_flat = zeros((num_el, 1))
+            num_el += np.prod(el.shape)
+        theta_flat = np.zeros((num_el, 1))
         start_indx = 0
         for el in theta_list:
-            stop_indx = start_indx + prod(el.shape)
+            stop_indx = start_indx + np.prod(el.shape)
             theta_flat[start_indx:stop_indx, 0] = el.ravel()
             start_indx = stop_indx
         return theta_flat
@@ -732,7 +733,7 @@ class SFO(object):
         theta_list = []
         start_indx = 0
         for el in self.theta_list:
-            stop_indx = start_indx + prod(el.shape)
+            stop_indx = start_indx + np.prod(el.shape)
             theta_list.append(theta_flat[start_indx:stop_indx,0].reshape(el.shape))
             start_indx = stop_indx
         return theta_list
@@ -767,7 +768,7 @@ class SFO(object):
         # update the subspace with the new gradient direction
         self.update_subspace(df)
         # gradient projected into the current subspace
-        df_proj = dot( self.P.T, df )
+        df_proj = np.dot( self.P.T, df )
         # keep a record of function evaluations
         self.hist_f_flat.append(f)
         self.eval_count[idx] += 1
@@ -782,12 +783,12 @@ class SFO(object):
         # evaluate it.  We want to get to two evaluations per subfunction
         # as quickly as possibly so that it's possible to estimate a Hessian
         # for it
-        gd = flatnonzero((self.eval_count == 1) & self.active)
+        gd = np.flatnonzero((self.eval_count == 1) & self.active)
         if len(gd) > 0:
             return gd[0]
-        gd = flatnonzero((self.eval_count < 2) & self.active)
+        gd = np.flatnonzero((self.eval_count < 2) & self.active)
         if len(gd) > 0:
-            return random.permutation(gd)[0]
+            return np.random.permutation(gd)[0]
 
         if self.subfunction_selection == 'distance':
             # the default case -- use the subfunction evaluated farthest
@@ -799,31 +800,31 @@ class SFO(object):
             # full Hessian
             full_H_combined = self.get_full_H_with_diagonal()
             # squared distance
-            distance = sum(dtheta*dot(full_H_combined, dtheta), axis=0)
+            distance = np.sum(dtheta*np.dot(full_H_combined, dtheta), axis=0)
             # sort the distances from largest to smallest
-            dist_ord = argsort(-distance)
+            dist_ord = np.argsort(-distance)
             # and keep only the indices that belong to active subfunctions
             dist_ord = dist_ord[self.active[dist_ord]]
             # and choose the active subfunction from farthest away
             indx = dist_ord[0]
-            if max(distance[self.active]) < self.eps and sum(~self.active)>0 and self.eval_count[indx]>0:
+            if np.max(distance[self.active]) < self.eps and np.sum(~self.active)>0 and self.eval_count[indx]>0:
                 if self.display > 2:
                     print("all active subfunctions evaluated here.  expanding active set."),
-                indx = random.permutation(flatnonzero(~self.active))[0]
+                indx = np.random.permutation(np.flatnonzero(~self.active))[0]
                 self.active[indx] = True
             return indx
 
         if self.subfunction_selection == 'random':
             # choose an index to update at random
-            indx = random.permutation(flatnonzero(self.active))[0]
+            indx = np.random.permutation(np.flatnonzero(self.active))[0]
             return indx
 
         if self.subfunction_selection == 'cyclic':
             # choose indices to update in a cyclic fashion
-            active_list = flatnonzero(self.active)
+            active_list = np.flatnonzero(self.active)
             indx = active_list[self.cyclic_subfunction_index]
             self.cyclic_subfunction_index += 1
-            self.cyclic_subfunction_index %= sum(self.active)
+            self.cyclic_subfunction_index %= np.sum(self.active)
             return indx
 
         throw("unknown subfunction choice method")
@@ -835,7 +836,7 @@ class SFO(object):
 
         # check to see whether the step should be a failure
         step_failure = False
-        if not isfinite(f) or sum(~isfinite(df_proj))>0:
+        if not np.isfinite(f) or np.sum(~np.isfinite(df_proj))>0:
             # step is a failure if function or gradient is non-finite
             step_failure = True
             if self.display > 2:
@@ -843,7 +844,7 @@ class SFO(object):
         elif self.eval_count[indx] == 1:
             # the step is a candidate for failure if it's a new subfunction, and it's
             # much larger than expected
-            if f > mean(self.hist_f[self.eval_count>0,0]) + 3.*std(self.hist_f[self.eval_count>0,0]):
+            if f > np.mean(self.hist_f[self.eval_count>0,0]) + 3.*np.std(self.hist_f[self.eval_count>0,0]):
                 step_failure = True
         elif f > self.hist_f[indx,0]:
             # if this subfunction has increased in value, then look whether it's larger
@@ -867,19 +868,19 @@ class SFO(object):
 
             # the subspace may be updated during the function calls
             # so store this in the full space
-            df = dot(self.P, df_proj)
+            df = np.dot(self.P, df_proj)
 
             f_lastpos, df_lastpos_proj = self.f_df_wrapper(self.theta_prior_step, indx)
-            df_lastpos = dot(self.P, df_lastpos_proj)
+            df_lastpos = np.dot(self.P, df_lastpos_proj)
 
             ## if the function value exploded, then back it off until it's a
             ## reasonable order of magnitude before adding anything to the history
             f_pred = self.get_predicted_subf(indx, self.theta_proj)
-            if isfinite(self.hist_f[indx,0]):
-                predicted_f_diff = abs(f_pred - self.hist_f[indx,0])
+            if np.isfinite(self.hist_f[indx,0]):
+                predicted_f_diff = np.abs(f_pred - self.hist_f[indx,0])
             else:
-                predicted_f_diff = abs(f - f_lastpos)
-            if not isfinite(predicted_f_diff) or predicted_f_diff < self.eps:
+                predicted_f_diff = np.abs(f - f_lastpos)
+            if not np.isfinite(predicted_f_diff) or predicted_f_diff < self.eps:
                 predicted_f_diff = self.eps
 
             for i_ls in range(10):
@@ -891,37 +892,37 @@ class SFO(object):
                     print("ls {0} f_diff {1} predicted_f_diff {2} ".format(i_ls, f - f_lastpos, predicted_f_diff))
                 # make the step length a factor of 100 shorter
                 self.theta = 0.99*self.theta_prior_step + 0.01*self.theta
-                self.theta_proj = dot(self.P.T, self.theta)
+                self.theta_proj = np.dot(self.P.T, self.theta)
                 # and recompute f and df at this new location
                 f, df_proj = self.f_df_wrapper(self.theta, indx)
-                df = dot(self.P, df_proj)
+                df = np.dot(self.P, df_proj)
 
             # we're done with function calls.  can move these back into the subspace.
-            df_proj = dot(self.P.T, df)
-            df_lastpos_proj = dot(self.P.T, df_lastpos)
+            df_proj = np.dot(self.P.T, df)
+            df_lastpos_proj = np.dot(self.P.T, df_lastpos)
 
             if f < f_lastpos:
                 # the original objective was better -- but add the newly evaluated point to the history,
                 # just so it's not a wasted function call
-                theta_lastpos_proj = dot(self.P.T, self.theta_prior_step)
+                theta_lastpos_proj = np.dot(self.P.T, self.theta_prior_step)
                 self.update_history(indx, theta_lastpos_proj, f_lastpos, df_lastpos_proj)
                 if self.display > 2:
-                    print("step failed, but last position was even worse ( f {0}, std f {1}),".format(f_lastpos, std(self.hist_f[self.eval_count>0,0]))),
+                    print("step failed, but last position was even worse ( f {0}, std f {1}),".format(f_lastpos, np.std(self.hist_f[self.eval_count>0,0]))),
             else:
                 # add the change in theta and the change in gradient to the history for this subfunction
                 # before failing over to the last position
-                if isfinite(f) and sum(~isfinite(df_proj))==0:
+                if np.isfinite(f) and np.sum(~np.isfinite(df_proj))==0:
                     self.update_history(indx, self.theta_proj, f, df_proj)
                 if self.display > 2:
-                    print("step failed, proposed f {0}, std f {1},".format(f, std(self.hist_f[self.eval_count>0,0]))),
+                    print("step failed, proposed f {0}, std f {1},".format(f, np.std(self.hist_f[self.eval_count>0,0]))),
                 f = f_lastpos
                 df_proj = df_lastpos_proj
                 self.theta = self.theta_prior_step
-                self.theta_proj = dot(self.P.T, self.theta)
+                self.theta_proj = np.dot(self.P.T, self.theta)
 
         # don't let steps get so short that they don't provide any usable Hessian information
         # TODO use a more principled cutoff here
-        self.step_scale = max([self.step_scale, 1e-5])
+        self.step_scale = np.max([self.step_scale, 1e-5])
 
         return step_failure, f, df_proj
 
@@ -931,12 +932,12 @@ class SFO(object):
         expand the set of active subfunctions as appropriate
         """
         # power in the average gradient direction
-        df_avg = mean(self.last_df[:,self.active], axis=1).reshape((-1,1))
-        p_df_avg = sum(df_avg * dot(full_H_inv, df_avg))
+        df_avg = np.mean(self.last_df[:,self.active], axis=1).reshape((-1,1))
+        p_df_avg = np.sum(df_avg * np.dot(full_H_inv, df_avg))
         # power of the standard error
         ldfs = self.last_df[:,self.active] - df_avg
-        num_active = sum(self.active)
-        p_df_sum = sum(ldfs * dot(full_H_inv, ldfs)) / num_active / (num_active - 1)
+        num_active = np.sum(self.active)
+        p_df_sum = np.sum(ldfs * np.dot(full_H_inv, ldfs)) / num_active / (num_active - 1)
         # if the standard errror in the estimated gradient is the same order of magnitude as the gradient,
         # we want to increase the size of the active set
         increase_desirable = p_df_sum >= p_df_avg*self.max_gradient_noise 
@@ -946,12 +947,12 @@ class SFO(object):
         increase_desirable = increase_desirable or self.iter_since_active_growth > num_active
         # make sure all the subfunctions have enough evaluations for a Hessian approximation
         # before bringing in new subfunctions
-        eligibile_for_increase = min(self.eval_count[self.active]) >= 2
+        eligibile_for_increase = np.min(self.eval_count[self.active]) >= 2
         # one more iteration has passed since the active set was last expanded
         self.iter_since_active_growth += 1
         if increase_desirable and eligibile_for_increase:
             # the index of the new subfunction to activate
-            new_gd = random.permutation(flatnonzero(~self.active))[:1]
+            new_gd = np.random.permutation(np.flatnonzero(~self.active))[:1]
             if len(new_gd) > 0:
                 self.iter_since_active_growth = 0
                 self.active[new_gd] = True
@@ -963,11 +964,13 @@ class SFO(object):
         """
         time_pass_start = time.time()
 
+        # 1./0
+
         ## choose an index to update
         indx = self.get_target_index()
 
         if self.display > 2:
-            print("||dtheta|| {0},".format(sqrt(sum((self.theta - self.theta_prior_step)**2)))),
+            print("||dtheta|| {0},".format(np.sqrt(np.sum((self.theta - self.theta_prior_step)**2)))),
             print("index {0}, last f {1},".format(indx, self.hist_f[indx,0])),
             print("step scale {0},".format(self.step_scale)),
 
@@ -986,14 +989,14 @@ class SFO(object):
         self.update_history(indx, self.theta_proj, f, df_proj)
 
         # increment the total distance traveled using the last update
-        self.total_distance += sqrt(sum((self.theta - self.theta_prior_step)**2))
+        self.total_distance += np.sqrt(np.sum((self.theta - self.theta_prior_step)**2))
 
         # the current contribution from this subfunction to the total Hessian approximation
-        H_pre_update = real(dot(self.b[:,:,indx], self.b[:,:,indx].T))
+        H_pre_update = np.real(np.dot(self.b[:,:,indx], self.b[:,:,indx].T))
         ## update this subfunction's Hessian estimate
         self.update_hessian(indx)
         # the new contribution from this subfunction to the total approximate hessian
-        H_new = real(dot(self.b[:,:,indx], self.b[:,:,indx].T))   
+        H_new = np.real(np.dot(self.b[:,:,indx], self.b[:,:,indx].T))   
         # update total Hessian using this subfunction's updated contribution
         self.full_H += H_new - H_pre_update
 
@@ -1001,23 +1004,23 @@ class SFO(object):
         full_df = 0.
         for i in range(self.N):
             dtheta = self.theta_proj - self.last_theta[:,[i]]
-            bdtheta = dot(self.b[:,:,i].T, dtheta)
-            Hdtheta = real(dot(self.b[:,:,i], bdtheta))
+            bdtheta = np.dot(self.b[:,:,i].T, dtheta)
+            Hdtheta = np.real(np.dot(self.b[:,:,i], bdtheta))
             Hdtheta += dtheta*self.min_eig_sub[i] # the diagonal contribution
             full_df += Hdtheta + self.last_df[:,[i]]
         full_H_combined = self.get_full_H_with_diagonal()
         # TODO - Use Woodbury identity instead of recalculating full inverse
-        full_H_inv = linalg.inv(full_H_combined)
+        full_H_inv = np.linalg.inv(full_H_combined)
 
         # calculate an update step
-        dtheta_proj = -dot(full_H_inv, full_df) * self.step_scale
+        dtheta_proj = -np.dot(full_H_inv, full_df) * self.step_scale
 
         #DEBUG
-        # dtheta_proj_length = sqrt(sum(dtheta_proj**2))
-        # if sum(self.eval_count) > self.N and dtheta_proj_length > self.eps:
+        # dtheta_proj_length = np.sqrt(np.sum(dtheta_proj**2))
+        # if np.sum(self.eval_count) > self.N and dtheta_proj_length > self.eps:
         #     # only allow a step to be up to a factor of 10 longer than the
         #     # average step length
-        #     avg_length = self.total_distance / float(sum(self.eval_count))
+        #     avg_length = self.total_distance / float(np.sum(self.eval_count))
         #     length_ratio = dtheta_proj_length / avg_length
         #     ratio_scale = 10.
         #     if length_ratio > ratio_scale:
@@ -1027,7 +1030,7 @@ class SFO(object):
         #         dtheta_proj /= length_ratio/ratio_scale
 
         # the update to theta, in the full dimensional space
-        dtheta = dot(self.P, dtheta_proj)
+        dtheta = np.dot(self.P, dtheta_proj)
 
         # backup the prior position, in case this is a failed step
         self.theta_prior_step = self.theta.copy()
@@ -1035,7 +1038,7 @@ class SFO(object):
         self.theta += dtheta
         self.theta_proj += dtheta_proj
         # the predicted improvement from this update step
-        self.f_predicted_total_improvement = 0.5 * dot(dtheta_proj.T, dot(full_H_combined, dtheta_proj))
+        self.f_predicted_total_improvement = 0.5 * np.dot(dtheta_proj.T, np.dot(full_H_combined, dtheta_proj))
 
         ## expand the set of active subfunctions as appropriate
         self.expand_active_subfunctions(full_H_inv, step_failure)
