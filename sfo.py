@@ -6,10 +6,13 @@ Attribution-Noncommercial License.
 """
 
 #from __future__ import print_function
-# from numpy import *
 import numpy as np
 from random import shuffle
-from collections import defaultdict
+
+# TODO remove this import.  I believe numpy functions are always
+# called using "np." now, but keeping this in case I've missed 
+# an edge case.
+from numpy import *
 
 import time
 import warnings
@@ -18,7 +21,8 @@ class SFO(object):
     def __init__(self, f_df, theta, subfunction_references, args=(), kwargs={},
         display=2, max_history_terms=10, hessian_init=1e5, init_subf=2,
         hess_max_dev = 1e8, hessian_algorithm='bfgs',
-        subfunction_selection='distance', max_gradient_noise=1.):
+        subfunction_selection='distance', max_gradient_noise=1.,
+        max_step_length_ratio=10.):
         """
         The main Sum of Functions Optimizer (SFO) class.
 
@@ -77,6 +81,7 @@ class SFO(object):
         self.sub_ref = subfunction_references
         self.hessian_algorithm = hessian_algorithm.lower()
         self.subfunction_selection = subfunction_selection.lower()
+        self.max_step_length_ratio = max_step_length_ratio
         # theta, in its original format
         self.theta_original = theta
         # theta, as a list of numpy arrays
@@ -1016,18 +1021,18 @@ class SFO(object):
         dtheta_proj = -np.dot(full_H_inv, full_df) * self.step_scale
 
         #DEBUG
-        # dtheta_proj_length = np.sqrt(np.sum(dtheta_proj**2))
-        # if np.sum(self.eval_count) > self.N and dtheta_proj_length > self.eps:
-        #     # only allow a step to be up to a factor of 10 longer than the
-        #     # average step length
-        #     avg_length = self.total_distance / float(np.sum(self.eval_count))
-        #     length_ratio = dtheta_proj_length / avg_length
-        #     ratio_scale = 10.
-        #     if length_ratio > ratio_scale:
-        #         if self.display > 3:
-        #             print "truncating step length from %g to %g"%(dtheta_proj_length, ratio_scale*avg_length),
-        #         dtheta_proj_length /= length_ratio/ratio_scale
-        #         dtheta_proj /= length_ratio/ratio_scale
+        dtheta_proj_length = np.sqrt(np.sum(dtheta_proj**2))
+        if np.sum(self.eval_count) > self.N and dtheta_proj_length > self.eps:
+            # only allow a step to be up to a factor of max_step_length_ratio longer than the
+            # average step length
+            avg_length = self.total_distance / float(np.sum(self.eval_count))
+            length_ratio = dtheta_proj_length / avg_length
+            ratio_scale = self.max_step_length_ratio
+            if length_ratio > ratio_scale:
+                if self.display > 3:
+                    print "truncating step length from %g to %g"%(dtheta_proj_length, ratio_scale*avg_length),
+                dtheta_proj_length /= length_ratio/ratio_scale
+                dtheta_proj /= length_ratio/ratio_scale
 
         # the update to theta, in the full dimensional space
         dtheta = np.dot(self.P, dtheta_proj)
