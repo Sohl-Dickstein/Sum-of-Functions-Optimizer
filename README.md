@@ -68,7 +68,7 @@ The initialization parameters are:
 
 Slightly more documentation can be found in **sfo.m**.
 
-### Debugging
+### Special situations
 
 Email jascha@stanford.edu with questions if you don't find your answer here.
 
@@ -76,7 +76,11 @@ Email jascha@stanford.edu with questions if you don't find your answer here.
 
 If too much time is spent inside SFO relative to inside the objective function, then reduce the number of subfunctions by increasing the minibatch size or merging subfunctions.
 
-#### Using with Dropout
+#### Replacing minibatches / using SFO in the infinite data limit
+
+In the Python version of the code, a subfunction or minibatch can be replaced by calling the function `replace_subfunction`.  See the documentation in ***sfo.py*** for more details.  Note that replacing a subfunction without calling `replace_subfunction` will cause the optimizer to fail, since SFO relies on subfunctions returning consistent gradients.
+
+#### Using with dropout
 
 Stochastic gradients will break SFO, because it uses the change in the minibatch/subfunction gradient to estimate the Hessian matrix.  The benefits of noise regularization can be achieved without making the gradients stochastic by using frozen noise.  That is, in the case of dropout, assign a random dropout mask to each datapoint.  Every time that datapoint is evaluated however, use the same dropout mask.  This makes the gradients consistent across multiple evaluations of the minibatch.
 
