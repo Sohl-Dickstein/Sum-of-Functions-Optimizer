@@ -48,7 +48,7 @@ class SFO(object):
             subfunction call, larger = debugging info
         max_history_terms=10 - The number of history terms to use for the
             BFGS updates.
-        hessian_init=1e6 - The initial estimate of the Hessian for the first
+        hessian_init=1e5 - The initial estimate of the Hessian for the first
             init_subf subfunctions is set to this value times the identity
             matrix.  This number should be large, but not so large that there
             are numerical errors when the first update step has length
@@ -920,6 +920,13 @@ class SFO(object):
                     self.update_history(indx, self.theta_proj, f, df_proj)
                 if self.display > 2:
                     print("step failed, proposed f {0}, std f {1},".format(f, np.std(self.hist_f[self.eval_count>0,0]))),
+                if self.display > -1 and np.sum(self.eval_count>1) < 2:
+                    print(  "Step failed on the very first subfunction.  This is\n"
+                            "either due to an incorrect gradient, or a very large\n"
+                            "Hessian.  Try:\n"
+                            "   - Calling check_grad() (see README.md for details)\n"
+                            "   - Initializing SFO with a larger initial Hessian, by\n"
+                            "calling it with hessian_init=1e12 (or other large number")
                 f = f_lastpos
                 df_proj = df_lastpos_proj
                 self.theta = self.theta_prior_step
