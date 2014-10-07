@@ -857,10 +857,12 @@ class SFO(object):
             # calculate the predicted value of this subfunction
             f_pred = self.get_predicted_subf(indx, self.theta_proj)
             # if the subfunction exceeds its predicted value by more than the predicted average gain
-            # then mark the step as a failure
+            # in the other subfunctions, then mark the step as a failure
             # (note that it's been about N steps since this has been evaluated, and that this subfunction can lay
             # claim to about 1/N fraction of the objective change)
-            if f - f_pred > self.f_predicted_total_improvement:
+            predicted_improvement_others = self.f_predicted_total_improvement - (f_pred - self.hist_f[indx,0])
+
+            if f - f_pred > predicted_improvement_others:
                 step_failure = True
 
         if not step_failure:
@@ -921,12 +923,12 @@ class SFO(object):
                 if self.display > 2:
                     print("step failed, proposed f {0}, std f {1},".format(f, np.std(self.hist_f[self.eval_count>0,0]))),
                 if self.display > -1 and np.sum(self.eval_count>1) < 2:
-                    print(  "Step failed on the very first subfunction.  This is\n"
+                    print(  "\nStep failed on the very first subfunction.  This is\n"
                             "either due to an incorrect gradient, or a very large\n"
                             "Hessian.  Try:\n"
                             "   - Calling check_grad() (see README.md for details)\n"
                             "   - Initializing SFO with a larger initial Hessian, by\n"
-                            "calling it with hessian_init=1e12 (or other large number")
+                            "calling it with hessian_init=1e12 (or other large number)")
                 f = f_lastpos
                 df_proj = df_lastpos_proj
                 self.theta = self.theta_prior_step
