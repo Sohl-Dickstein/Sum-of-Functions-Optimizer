@@ -860,7 +860,7 @@ class SFO(object):
             # in the other subfunctions, then mark the step as a failure
             # (note that it's been about N steps since this has been evaluated, and that this subfunction can lay
             # claim to about 1/N fraction of the objective change)
-            predicted_improvement_others = self.f_predicted_total_improvement - (f_pred - self.hist_f[indx,0])
+            predicted_improvement_others = self.f_predicted_total_improvement - (self.hist_f[indx,0] - f_pred)
 
             if f - f_pred > predicted_improvement_others:
                 step_failure = True

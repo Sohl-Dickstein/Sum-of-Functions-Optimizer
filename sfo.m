@@ -767,7 +767,7 @@ classdef sfo < handle
                 % in the other subfunctions, then mark the step as a failure
                 % (note that it's been about N steps since this has been evaluated, & that this subfunction can lay;
                 % claim to about 1/N fraction of the objective change);
-                predicted_improvement_others = obj.f_predicted_total_improvement - (f_pred - obj.hist_f(indx,1));
+                predicted_improvement_others = obj.f_predicted_total_improvement - (obj.hist_f(indx,1) - f_pred);
                 if f - f_pred > predicted_improvement_others
                     step_failure = true;
                 end
