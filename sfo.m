@@ -755,8 +755,10 @@ classdef sfo < handle
             elseif obj.eval_count(indx) == 1
                 % the step is a candidate for failure if it's a new subfunction, & it's;
                 % much larger than expected;
-                if f > mean(obj.hist_f(obj.eval_count>0,1)) + 3*std(obj.hist_f(obj.eval_count>0,1))
-                    step_failure = true;
+                if max(obj.eval_count) > 1
+                    if f > mean(obj.hist_f(obj.eval_count>1,1)) + 3*std(obj.hist_f(obj.eval_count>1,1))
+                        step_failure = true;
+                    end
                 end
             elseif f > obj.hist_f(indx,1)
                 % if this subfunction has increased in value, then look whether it's larger;

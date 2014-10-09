@@ -849,8 +849,9 @@ class SFO(object):
         elif self.eval_count[indx] == 1:
             # the step is a candidate for failure if it's a new subfunction, and it's
             # much larger than expected
-            if f > np.mean(self.hist_f[self.eval_count>0,0]) + 3.*np.std(self.hist_f[self.eval_count>0,0]):
-                step_failure = True
+            if np.max(self.eval_count) > 1:
+                if f > np.mean(self.hist_f[self.eval_count>1,0]) + 3.*np.std(self.hist_f[self.eval_count>1,0]):
+                    step_failure = True
         elif f > self.hist_f[indx,0]:
             # if this subfunction has increased in value, then look whether it's larger
             # than its predicted value by enough to trigger a failure
