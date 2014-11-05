@@ -22,7 +22,7 @@ class SFO(object):
         display=2, max_history_terms=10, hessian_init=1e5, init_subf=2,
         hess_max_dev = 1e8, hessian_algorithm='bfgs',
         subfunction_selection='distance', max_gradient_noise=1.,
-        max_step_length_ratio=10.):
+        max_step_length_ratio=10., minimum_step_length=1e-8):
         """
         The main Sum of Functions Optimizer (SFO) class.
 
@@ -48,6 +48,13 @@ class SFO(object):
             subfunction call, larger = debugging info
         max_history_terms=10 - The number of history terms to use for the
             BFGS updates.
+        minimum_step_length=1e-8 - The shortest step length allowed. Any update
+            steps shorter than this will be made this length. Set this so as to
+            prevent numerical errors when computing the difference in gradients
+            before and after a step.
+        max_step_length_ratio=10 - The length of the longest allowed update step, 
+            relative to the average length of prior update steps. Takes effect 
+            after the first full pass through the data.
         hessian_init=1e5 - The initial estimate of the Hessian for the first
             init_subf subfunctions is set to this value times the identity
             matrix.  This number should be large, but not so large that there
@@ -101,6 +108,7 @@ class SFO(object):
         # update steps are too small to be used for Hessian updates without
         # incurring large numerical errors.
         self.eps = 1e-12
+        self.minimum_step_length = minimum_step_length
 
         # the min and max dimenstionality for the subspace
         self.K_min = subspace_dimensionality
@@ -133,6 +141,7 @@ class SFO(object):
         self.total_distance = 0.
         # number of function evaluations for each subfunction
         self.eval_count = np.zeros((self.N))
+        self.eval_count_total = 0
 
         # the current dimensionality of the subspace
         self.K_current = 1
@@ -204,14 +213,14 @@ class SFO(object):
             num_steps = int(num_passes*self.N)
         for i in range(num_steps):
             if self.display > 1:
-                print("pass {0}, step {1},".format(float(np.sum(self.eval_count))/self.N, i)),
+                print("pass {0}, step {1},".format(float(self.eval_count_total)/self.N, i)),
             self.optimization_step()
             if self.display > 1:
                 print("active {0}/{1}, sfo time {2} s, func time {3} s, f {4}, <f> {5}".format(np.sum(self.active), self.active.shape[0], self.time_pass - self.time_func, self.time_func, self.hist_f_flat[-1], np.mean(self.hist_f[self.eval_count>0,0])))
         if num_steps < 1:
             print "No optimization steps performed.  Change num_passes or num_steps."
         elif self.display > 0:
-            print("active {0}/{1}, pass #{2}, sfo {3} s, func {4} s, <f> {5}".format(np.sum(self.active), self.active.shape[0], float(np.sum(self.eval_count))/self.N, self.time_pass - self.time_func, self.time_func, np.mean(self.hist_f[self.eval_count>0,0])))
+            print("active {0}/{1}, pass #{2}, sfo {3} s, func {4} s, <f> {5}".format(np.sum(self.active), self.active.shape[0], float(self.eval_count_total)/self.N, self.time_pass - self.time_func, self.time_func, np.mean(self.hist_f[self.eval_count>0,0])))
             if (self.time_pass - self.time_func) > self.time_func and self.N >= 25 and self.time_pass > 60:
                 print "More time was spent in SFO than the objective function."
                 print "You may want to consider breaking your data into fewer minibatches to reduce overhead."
@@ -280,6 +289,9 @@ class SFO(object):
             # replace the reference for this subfunction
             self.sub_ref[idx] = new_reference
 
+        if self.display > 5:
+            print "replacing %d"%idx
+
         if self.eval_count[idx] < 1:
             # subfunction not active yet -- no history
             return
@@ -289,14 +301,21 @@ class SFO(object):
             self.hist_deltatheta[:,:,idx] = 0.
             self.hist_deltadf[:,:,idx]
 
-        # evaluate this subfunction at the last location
-        # (use the last location, to avoid weird interactions with rejected updates)
-        f, df_proj = self.f_df_wrapper(self.theta_prior_step, idx)
-        # replace the last function, gradient, and position with the one just
-        # measured.  set skip_delta so that the change in gradient over 
-        # the change in subfunction is not used.
-        theta_lastpos_proj = np.dot(self.P.T, self.theta_prior_step)
-        self.update_history(idx, theta_lastpos_proj, f, df_proj, skip_delta=True)
+        # reset eval count.
+        # 0, not 1, so that it will also look in the direction this new gradient
+        # pushes us
+        self.eval_count[idx] = 0
+
+        # # evaluate this subfunction at the last location
+        # # (use the last location, to avoid weird interactions with rejected updates)
+        # f, df_proj = self.f_df_wrapper(self.theta_prior_step, idx)
+        # # replace the last function, gradient, and position with the one just
+        # # measured.  set skip_delta so that the change in gradient over 
+        # # the change in subfunction is not used.
+        # theta_lastpos_proj = np.dot(self.P.T, self.theta_prior_step)
+        # self.update_history(idx, theta_lastpos_proj, f, df_proj, skip_delta=True)
+        # TODO get rid of skip_delta in update_history.  that's now handled
+        # automagically by the eval_count = 0
 
 
     def apply_subspace_transformation(self,T_left,T_right):
@@ -777,6 +796,7 @@ class SFO(object):
         # keep a record of function evaluations
         self.hist_f_flat.append(f)
         self.eval_count[idx] += 1
+        self.eval_count_total += 1
 
         return f, df_proj
 
@@ -1030,12 +1050,16 @@ class SFO(object):
         # calculate an update step
         dtheta_proj = -np.dot(full_H_inv, full_df) * self.step_scale
 
-        #DEBUG
         dtheta_proj_length = np.sqrt(np.sum(dtheta_proj**2))
-        if np.sum(self.eval_count) > self.N and dtheta_proj_length > self.eps:
+        if dtheta_proj_length < self.minimum_step_length:
+            dtheta_proj *= self.minimum_step_length/dtheta_proj_length
+            dtheta_proj_length = self.minimum_step_length
+            if self.display > 3:
+                print "forcing minimum step length"
+        if self.eval_count_total > self.N and dtheta_proj_length > self.eps:
             # only allow a step to be up to a factor of max_step_length_ratio longer than the
             # average step length
-            avg_length = self.total_distance / float(np.sum(self.eval_count))
+            avg_length = self.total_distance / float(self.eval_count_total)
             length_ratio = dtheta_proj_length / avg_length
             ratio_scale = self.max_step_length_ratio
             if length_ratio > ratio_scale:
