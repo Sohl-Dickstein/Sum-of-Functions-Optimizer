@@ -718,6 +718,13 @@ classdef sfo < handle
         function indx = get_target_index(obj)
             % Choose which subfunction to update this iteration.
 
+            % if an active subfunction has one evaluation, get a second
+            % so we can have a Hessian estimate
+            gd = find((obj.eval_count == 1) & obj.active);
+            if ~isempty(gd)
+                indx = gd(randperm(length(gd), 1));
+                return
+            end
             % If an active subfunction has less than two observations, then;
             % evaluate it.  We want to get to two evaluations per subfunction;
             % as quickly as possibly so that it's possible to estimate a Hessian;
@@ -725,31 +732,32 @@ classdef sfo < handle
             gd = find((obj.eval_count < 2) & obj.active);
             if ~isempty(gd)
                 indx = gd(randperm(length(gd), 1));
-            else
-                % use the subfunction evaluated farthest;
-                % from the current location, weighted by the Hessian;
+                return
+            end
 
-                % difference between current theta & most recent evaluation;
-                % for all subfunctions;
-                dtheta = bsxfun(@plus, obj.theta_proj, -obj.last_theta);
-                % full Hessian;
-                full_H_combined = obj.get_full_H_with_diagonal();
-                % squared distance;
-                distance = sum(dtheta.*(full_H_combined * dtheta), 1);
-                % sort the distances from largest to smallest;
-                [~, dist_ord] = sort(-distance);
-                % & keep only the indices that belong to active subfunctions;
-                dist_ord = dist_ord(obj.active(dist_ord));
-                % & choose the active subfunction from farthest away;
-                indx = dist_ord(1);
-                if max(distance(obj.active)) < obj.eps && sum(~obj.active)>0 && obj.eval_count(indx)>0
-                    if obj.display > 2
-                        fprintf('all active subfunctions evaluated here.  expanding active set.');
-                    end
-                    inactive = find(~obj.active);
-                    indx = inactive(randperm(length(inactive), 1));
-                    obj.active(indx) = true;
+            % use the subfunction evaluated farthest;
+            % from the current location, weighted by the Hessian;
+
+            % difference between current theta & most recent evaluation;
+            % for all subfunctions;
+            dtheta = bsxfun(@plus, obj.theta_proj, -obj.last_theta);
+            % full Hessian;
+            full_H_combined = obj.get_full_H_with_diagonal();
+            % squared distance;
+            distance = sum(dtheta.*(full_H_combined * dtheta), 1);
+            % sort the distances from largest to smallest;
+            [~, dist_ord] = sort(-distance);
+            % & keep only the indices that belong to active subfunctions;
+            dist_ord = dist_ord(obj.active(dist_ord));
+            % & choose the active subfunction from farthest away;
+            indx = dist_ord(1);
+            if max(distance(obj.active)) < obj.eps && sum(~obj.active)>0 && obj.eval_count(indx)>0
+                if obj.display > 2
+                    fprintf('all active subfunctions evaluated here.  expanding active set.');
                 end
+                inactive = find(~obj.active);
+                indx = inactive(randperm(length(inactive), 1));
+                obj.active(indx) = true;
             end
         end
 
