@@ -69,9 +69,19 @@ classdef sfo < handle
         % the update steps will be rescaled by this;
         step_scale = 1;
         % 'very small' for various tasks, most importantly identifying when;
-        % update steps are too small to be used for Hessian updates without;
-        % incurring large numerical errors.;
+        % update steps or gradient changes are too small to be used for Hessian
+        % updates without incurring large numerical errors.;
         eps = 1e-12;
+
+        % The shortest step length allowed. Any update
+        % steps shorter than this will be made this length. Set this so as to
+        % prevent numerical errors when computing the difference in gradients
+        % before and after a step.
+        minimum_step_length = 1e-8;
+        % The length of the longest allowed update step, 
+        % relative to the average length of prior update steps. Takes effect 
+        % after the first full pass through the data.
+        max_step_length_ratio = 10;
 
         % the min & max dimenstionality for the subspace;
         K_min;
@@ -950,19 +960,28 @@ classdef sfo < handle
             % calculate an update step;
             dtheta_proj = -(full_H_inv) * (full_df) .* obj.step_scale;
 
-            %DEBUG;
-            % dtheta_proj_length = sqrt(sum(dtheta_proj.^2))
-            % if sum(obj.eval_count) > obj.N & dtheta_proj_length > 1e-20:
-            %     % only allow a step to be up to a factor of 2 longer than the;
-            %     % average step length;
-            %     avg_length = obj.total_distance / float(sum(obj.eval_count));
-            %     length_ratio = dtheta_proj_length / avg_length;
-            %     ratio_scale = 10.;
-            %     if length_ratio > ratio_scale:
-            %         if obj.display > 3:
-            %             print 'truncating step length from %g to %g'%(dtheta_proj_length, ratio_scale.*avg_length);
-            %         dtheta_proj_length /= length_ratio/ratio_scale;
-            %         dtheta_proj /= length_ratio/ratio_scale;
+            dtheta_proj_length = sqrt(sum(dtheta_proj(:).^2));
+            if dtheta_proj_length < obj.minimum_step_length
+                dtheta_proj = dtheta_proj*obj.minimum_step_length/dtheta_proj_length;
+                dtheta_proj_length = obj.minimum_step_length;
+                if obj.display > 3
+                    fprintf('forcing minimum step length');
+                end
+            end
+            if sum(obj.eval_count) > obj.N && dtheta_proj_length > obj.eps
+                % only allow a step to be up to a factor of max_step_length_ratio longer than the
+                % average step length
+                avg_length = obj.total_distance / sum(obj.eval_count);
+                length_ratio = dtheta_proj_length / avg_length;
+                ratio_scale = obj.max_step_length_ratio;
+                if length_ratio > ratio_scale
+                    if obj.display > 3
+                        fprintf('truncating step length from %g to %g', dtheta_proj_length, ratio_scale*avg_length);
+                    end
+                    dtheta_proj_length = dtheta_proj_length/(length_ratio/ratio_scale);
+                    dtheta_proj = dtheta_proj/(length_ratio/ratio_scale);
+                end
+            end
 
             % the update to theta, in the full dimensional space;
             dtheta = (obj.P) * (dtheta_proj);
