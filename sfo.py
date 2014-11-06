@@ -804,13 +804,15 @@ class SFO(object):
     def get_target_index(self):
         """ Choose which subfunction to update this iteration. """
 
+        # if an active subfunction has one evaluation, get a second
+        # so we can have a Hessian estimate
+        gd = np.flatnonzero((self.eval_count == 1) & self.active)
+        if len(gd) > 0:
+            return gd[0]
         # If an active subfunction has less than two observations, then
         # evaluate it.  We want to get to two evaluations per subfunction
         # as quickly as possibly so that it's possible to estimate a Hessian
         # for it
-        gd = np.flatnonzero((self.eval_count == 1) & self.active)
-        if len(gd) > 0:
-            return gd[0]
         gd = np.flatnonzero((self.eval_count < 2) & self.active)
         if len(gd) > 0:
             return np.random.permutation(gd)[0]
