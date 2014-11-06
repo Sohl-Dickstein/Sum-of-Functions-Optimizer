@@ -218,12 +218,12 @@ class SFO(object):
             if self.display > 1:
                 print("active {0}/{1}, sfo time {2} s, func time {3} s, f {4}, <f> {5}".format(np.sum(self.active), self.active.shape[0], self.time_pass - self.time_func, self.time_func, self.hist_f_flat[-1], np.mean(self.hist_f[self.eval_count>0,0])))
         if num_steps < 1:
-            print "No optimization steps performed.  Change num_passes or num_steps."
+            print("No optimization steps performed.  Change num_passes or num_steps.")
         elif self.display > 0:
             print("active {0}/{1}, pass #{2}, sfo {3} s, func {4} s, <f> {5}".format(np.sum(self.active), self.active.shape[0], float(self.eval_count_total)/self.N, self.time_pass - self.time_func, self.time_func, np.mean(self.hist_f[self.eval_count>0,0])))
             if (self.time_pass - self.time_func) > self.time_func and self.N >= 25 and self.time_pass > 60:
-                print "More time was spent in SFO than the objective function."
-                print "You may want to consider breaking your data into fewer minibatches to reduce overhead."
+                print("More time was spent in SFO than the objective function.")
+                print("You may want to consider breaking your data into fewer minibatches to reduce overhead.")
 
         # reverse the flattening transformation on theta
         return self.theta_flat_to_original(self.theta)
@@ -243,7 +243,7 @@ class SFO(object):
         if small_diff is None:
             # step size to use for gradient check
             small_diff = self.eps*1e6
-        print "Testing step size %g"%small_diff
+        print("Testing step size %g"%small_diff)
 
         for i in np.random.permutation(range(self.N)):
             fl, dfl = self.f_df_wrapper(self.theta, i, return_full=True)
@@ -290,7 +290,7 @@ class SFO(object):
             self.sub_ref[idx] = new_reference
 
         if self.display > 5:
-            print "replacing %d"%idx
+            print("replacing %d"%idx)
 
         if self.eval_count[idx] < 1:
             # subfunction not active yet -- no history
@@ -1055,7 +1055,7 @@ class SFO(object):
             dtheta_proj *= self.minimum_step_length/dtheta_proj_length
             dtheta_proj_length = self.minimum_step_length
             if self.display > 3:
-                print "forcing minimum step length"
+                print("forcing minimum step length")
         if self.eval_count_total > self.N and dtheta_proj_length > self.eps:
             # only allow a step to be up to a factor of max_step_length_ratio longer than the
             # average step length
@@ -1064,7 +1064,7 @@ class SFO(object):
             ratio_scale = self.max_step_length_ratio
             if length_ratio > ratio_scale:
                 if self.display > 3:
-                    print "truncating step length from %g to %g"%(dtheta_proj_length, ratio_scale*avg_length),
+                    print("truncating step length from %g to %g"%(dtheta_proj_length, ratio_scale*avg_length))
                 dtheta_proj_length /= length_ratio/ratio_scale
                 dtheta_proj /= length_ratio/ratio_scale
 
