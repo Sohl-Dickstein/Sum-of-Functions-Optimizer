@@ -21,7 +21,7 @@ class SFO(object):
     def __init__(self, f_df, theta, subfunction_references, args=(), kwargs={},
         display=2, max_history_terms=10, hessian_init=1e5, init_subf=2,
         hess_max_dev = 1e8, hessian_algorithm='bfgs',
-        subfunction_selection='distance', max_gradient_noise=1.,
+        subfunction_selection='distance both', max_gradient_noise=1.,
         max_step_length_ratio=10., minimum_step_length=1e-8):
         """
         The main Sum of Functions Optimizer (SFO) class.
@@ -817,7 +817,14 @@ class SFO(object):
         if len(gd) > 0:
             return np.random.permutation(gd)[0]
 
-        if self.subfunction_selection == 'distance':
+        subfunction_selection = self.subfunction_selection
+        if subfunction_selection == 'distance both':
+            if np.random.randn() < 0:
+                subfunction_selection = 'distance'
+            else:
+                subfunction_selection = 'single distance'
+
+        if subfunction_selection == 'distance':
             # the default case -- use the subfunction evaluated farthest
             # from the current location, weighted by the Hessian
 
@@ -841,12 +848,24 @@ class SFO(object):
                 self.active[indx] = True
             return indx
 
-        if self.subfunction_selection == 'random':
+        if subfunction_selection == 'single distance':
+            max_dist = -1
+            indx = -1
+            for i in range(self.N):
+                dtheta = self.theta_proj - self.last_theta[:,[i]]
+                bdtheta = np.dot(self.b[:,:,i].T, dtheta)
+                dist = np.sum(bdtheta**2) + np.sum(dtheta**2)*self.min_eig_sub[i]
+                if (dist > max_dist) and self.active[i]:
+                    max_dist = dist
+                    indx = i
+            return indx
+
+        if subfunction_selection == 'random':
             # choose an index to update at random
             indx = np.random.permutation(np.flatnonzero(self.active))[0]
             return indx
 
-        if self.subfunction_selection == 'cyclic':
+        if subfunction_selection == 'cyclic':
             # choose indices to update in a cyclic fashion
             active_list = np.flatnonzero(self.active)
             indx = active_list[self.cyclic_subfunction_index]
