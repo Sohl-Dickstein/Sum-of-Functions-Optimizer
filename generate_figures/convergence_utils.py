@@ -219,7 +219,7 @@ def make_plot_single_model(hist_f, hist_x_projection, hist_events, model_name,
     elif "Perceptron" in title:
         plt.axis([ax[0], ax[1], 1e-7, 1e1])
     elif "ICA" in title:
-        plt.axis([ax[0], ax[1], 1e-2, 1e2])
+        plt.axis([ax[0], ax[1], 1e0, 1e3])
     try:
         plt.tight_layout()
     except:
