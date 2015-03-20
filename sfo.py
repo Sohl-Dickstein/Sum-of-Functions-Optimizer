@@ -22,7 +22,8 @@ class SFO(object):
         display=2, max_history_terms=10, hessian_init=1e5, init_subf=2,
         hess_max_dev = 1e8, hessian_algorithm='bfgs',
         subfunction_selection='distance both', max_gradient_noise=1.,
-        max_step_length_ratio=10., minimum_step_length=1e-8):
+        max_step_length_ratio=10., minimum_step_length=1e-8,
+        constraint_enforce_function=None):
         """
         The main Sum of Functions Optimizer (SFO) class.
 
@@ -76,6 +77,7 @@ class SFO(object):
         See README.md for example code.
         """
 
+        self.constraint_enforce_function = constraint_enforce_function
         self.display = display
         self.f_df = f_df
         self.args = args
@@ -1096,6 +1098,14 @@ class SFO(object):
         self.theta_prior_step = self.theta.copy()
         # update theta to the new location
         self.theta += dtheta
+
+        if not (self.constraint_enforce_function is None):
+            theta_original = self.theta_flat_to_original(self.theta)
+            theta_original = self.constraint_enforce_function(theta_original)
+            self.theta = self.theta_original_to_flat(theta_original)
+            dtheta = self.theta - self.theta_prior_step
+            dtheta_proj = np.dot(self.P.T, dtheta)
+
         self.theta_proj += dtheta_proj
         # the predicted improvement from this update step
         self.f_predicted_total_improvement = 0.5 * np.dot(dtheta_proj.T, np.dot(full_H_combined, dtheta_proj))
