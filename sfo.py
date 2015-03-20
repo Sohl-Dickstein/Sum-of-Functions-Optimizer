@@ -1097,17 +1097,19 @@ class SFO(object):
         # backup the prior position, in case this is a failed step
         self.theta_prior_step = self.theta.copy()
         # update theta to the new location
+        self.theta_proj += dtheta_proj
         self.theta += dtheta
 
-        if not (self.constraint_enforce_function is None):
+        if self.constraint_enforce_function is not None:
             theta_original = self.theta_flat_to_original(self.theta)
             theta_original = self.constraint_enforce_function(theta_original)
             self.theta = self.theta_original_to_flat(theta_original)
+            # NOTE self.theta_proj may be updated in update_subspace
             self.update_subspace(self.theta)
             dtheta = self.theta - self.theta_prior_step
             dtheta_proj = np.dot(self.P.T, dtheta)
+            self.theta_proj = np.dot(self.P.T, self.theta)
 
-        self.theta_proj += dtheta_proj
         # the predicted improvement from this update step
         self.f_predicted_total_improvement = 0.5 * np.dot(dtheta_proj.T, np.dot(full_H_combined, dtheta_proj))
 
