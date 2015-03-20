@@ -1103,6 +1103,7 @@ class SFO(object):
             theta_original = self.theta_flat_to_original(self.theta)
             theta_original = self.constraint_enforce_function(theta_original)
             self.theta = self.theta_original_to_flat(theta_original)
+            self.update_subspace(self.theta)
             dtheta = self.theta - self.theta_prior_step
             dtheta_proj = np.dot(self.P.T, dtheta)
 
