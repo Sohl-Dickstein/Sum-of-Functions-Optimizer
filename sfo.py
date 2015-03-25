@@ -868,7 +868,6 @@ class SFO(object):
 
     def update_natgrad(self):
 
-        theta_proj_old = np.dot(self.P.T, self.theta)
 
         theta_unnat = self.theta/self.nat_grad_rescale
         theta_prior_unnat = self.theta_prior_step/self.nat_grad_rescale
@@ -888,7 +887,6 @@ class SFO(object):
         diag_hess = np.sqrt(self.ddf_total_sqr / self.ddtheta_total_sqr)
         self.nat_grad_rescale = np.sqrt(diag_hess)
 
-
         self.theta = theta_unnat*self.nat_grad_rescale
         self.theta_prior_step = theta_prior_unnat*self.nat_grad_rescale
 
@@ -896,9 +894,10 @@ class SFO(object):
 
         self.theta_proj = np.dot(self.P.T, self.theta)
 
-        subspace_theta_shift = self.theta_proj - theta_proj_old
+        # subspace_theta_shift = self.theta_proj - theta_proj_old
 
-        self.last_theta += subspace_theta_shift
+        # DEBUG
+        # self.last_theta += subspace_theta_shift
 
         # self.last_theta[:,:] = np.dot(self.P.T, self.theta)
         # self.theta_proj = np.dot(self.P.T, self.theta)
