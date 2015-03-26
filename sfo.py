@@ -3,10 +3,6 @@ Author: Jascha Sohl-Dickstein (2014)
 This software is made available under the Creative Commons
 Attribution-Noncommercial License.
 ( http://creativecommons.org/licenses/by-nc/3.0/ )
-
-modified to have persistent approximate hessians
-
-
 """
 
 #from __future__ import print_function
@@ -180,6 +176,8 @@ class SFO(object):
         # number of function evaluations for each subfunction
         self.eval_count = np.zeros((self.N))
         self.eval_count_total = 0
+        # how many times the diagonal hessian approximation has been updated
+        self.natgrad_count = 0
 
         # the current dimensionality of the subspace
         self.K_current = 1
@@ -664,14 +662,21 @@ class SFO(object):
         """
 
         if np.sum(self.hist_deltatheta[:,0,indx]**2) <= 0:
+        # if np.sum(self.hist_deltatheta[:,1,indx]**2) <= 0:
             # no history -- initialize with the median eigenvalue from full Hessian
-            if self.display > 2:
-                print(" no history "),
             # H_full = self.get_full_H_with_diagonal()
             # U, V = np.linalg.eigh(H_full)
             # diag_init = np.median(U)/np.sum(self.active)
             diag_init = np.min(self.min_eig_sub[self.min_eig_sub>0])
-            print "setting diag_init %g"%diag_init,
+            # diag_init = np.min([
+            #     np.min(self.min_eig_sub[self.min_eig_sub>0]),
+            #     diag_approx    ])
+            # print [
+            #     np.min(self.min_eig_sub[self.min_eig_sub>0]),
+            #     diag_approx    ]
+            if self.display > 2:
+                print(" no history "),
+                print "setting diag_init %g"%diag_init,
             self.min_eig_sub[indx] = diag_init
             self.max_eig_sub[indx] = diag_init
             self.b[:,:,indx] = 0.
@@ -739,6 +744,8 @@ class SFO(object):
         # diag_approx = np.exp((
         #     np.log(diag_approx)*1./neval + np.log(self.min_eig_sub[indx])*(neval-1)/neval
         #     ))
+        # self.min_eig_sub[indx] = diag_approx
+        # self.min_eig_sub[indx] = 1. # the diagonal hessian approx should make this correct
         self.min_eig_sub[indx] = diag_approx/np.sum(self.active)
         self.max_eig_sub[indx] = np.max(U)
 
@@ -872,6 +879,18 @@ class SFO(object):
         theta_unnat = self.theta/self.nat_grad_rescale
         theta_prior_unnat = self.theta_prior_step/self.nat_grad_rescale
 
+        if self.natgrad_count == 0:
+            if self.display > 6:
+                print "averaging over each parameter type"
+            ddf_total_sqr_list = self.theta_flat_to_list(self.ddf_total_sqr)
+            ddtheta_total_sqr_list = self.theta_flat_to_list(self.ddtheta_total_sqr)
+            for dd in ddf_total_sqr_list:
+                dd[:] = np.mean(dd)
+            for dd in ddtheta_total_sqr_list:
+                dd[:] = np.mean(dd)
+            self.ddf_total_sqr = self.theta_list_to_flat(ddf_total_sqr_list)
+            self.ddtheta_total_sqr = self.theta_list_to_flat(ddtheta_total_sqr_list)
+
         # # compute the natural gradient for each block of parameters
         # grad_variance_list = self.theta_flat_to_list(self.total_grad_variance / np.mean(self.total_grad_variance))
         # nat_grad_rescale_list = []
@@ -884,8 +903,24 @@ class SFO(object):
         # self.nat_grad_rescale = self.theta_list_to_flat(nat_grad_rescale_list)
         # self.nat_grad_rescale = np.sqrt(self.total_grad_variance/self.eval_count_total)
         # self.nat_grad_rescale = np.sqrt(self.total_grad_variance/np.mean(self.total_grad_variance))
+        old_diag_hess = self.nat_grad_rescale**2
+
         diag_hess = np.sqrt(self.ddf_total_sqr / self.ddtheta_total_sqr)
-        self.nat_grad_rescale = np.sqrt(diag_hess)
+        diag_hess /= np.mean(diag_hess) # prevent changes in overall scale, only adapt relative scales
+
+        # # if self.natgrad_count == 0:
+        # #     self.nat_grad_rescale = np.sqrt(diag_hess)
+        # # else:
+        # # decay time of one pass through data
+        # # nact = float(np.sum(self.active))
+        # nact = np.ceil(float(np.sum(self.active))/(self.K_max-self.K_min))
+        # self.nat_grad_rescale = np.exp(
+        #     np.log(self.nat_grad_rescale)*(nact-1.)/nact +
+        #     np.log(np.sqrt(diag_hess))*1./nact
+        #     )
+
+        self.nat_grad_rescale = np.sqrt(diag_hess) # DEBUG
+
 
         self.theta = theta_unnat*self.nat_grad_rescale
         self.theta_prior_step = theta_prior_unnat*self.nat_grad_rescale
@@ -893,6 +928,34 @@ class SFO(object):
         self.update_subspace(self.theta)
 
         self.theta_proj = np.dot(self.P.T, self.theta)
+
+        # if self.natgrad_count == 0:
+        #     # we probably just made an enormous change to parameter scaling
+        #     # let's blow away the history...
+        #     if self.display > 3:
+        #         print "Establishing initial diagonal Hessian approximation. Clearing non-diagonal Hessian."
+        #     self.b[:] = 0
+        #     self.last_df[:] = 0
+        #     self.last_theta = np.tile(self.theta_proj, ((1,self.N)))
+        #     self.min_eig_sub[self.active] = 1. # assuming the diagonal approx is exactly right
+        #     self.hist_deltatheta[:] = 0
+        #     self.hist_deltadf[:] = 0
+        #     self.full_H[:] = 0
+        # # else:
+
+        # scale up the hessian to counteract
+        max_ratio = np.max(old_diag_hess/diag_hess)
+        min_ratio = np.min(old_diag_hess/diag_hess)
+        # self.min_eig_sub[self.active] *= max_ratio
+        self.last_df /= max_ratio
+        max_abs_ratio = np.max([max_ratio, 1./min_ratio])
+        self.last_theta = self.theta_proj + (self.last_theta - self.theta_proj)/max_abs_ratio
+        # make sure the mean doesn't shift
+        if self.display > 5:
+            min_ratio = np.min(old_diag_hess/diag_hess)
+            print "min, max, maxabs ratio %g, %g, %g, "%(min_ratio, max_ratio, max_abs_ratio)
+
+        self.natgrad_count += 1
 
         # subspace_theta_shift = self.theta_proj - theta_proj_old
 
@@ -1019,7 +1082,11 @@ class SFO(object):
                 'single distance',
                 'fewest evaluations',
                 'largest gap',
+                'most positive'
                 ])
+
+        if self.display > 7:
+            print subfunction_selection,
 
         if subfunction_selection == 'distance':
             # the default case -- use the subfunction evaluated farthest
@@ -1080,6 +1147,11 @@ class SFO(object):
             if indx == -1:
                 # DEBUG
                 1./0
+            return indx
+
+        if subfunction_selection == 'most positive':
+            maxf = np.nanmax(self.hist_f[:,0])
+            indx = np.flatnonzero(self.hist_f[:,0] == maxf)[0]
             return indx
 
         if subfunction_selection == 'random':
