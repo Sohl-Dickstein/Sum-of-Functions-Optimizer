@@ -25,7 +25,7 @@ class SFO(object):
         # subfunction_selection='distance both',
         max_gradient_noise=1.,
         max_step_length_ratio=2., minimum_step_length=1e-6, maximum_step_length=1e8,
-        update_sdev=0., 
+        update_sdev=0, 
         lead_ahead=None, 
         # lead_ahead='nesterov accumulate only',
         subspace_momentum=20,
@@ -881,13 +881,17 @@ class SFO(object):
 
         if self.natgrad_count == 0:
             if self.display > 6:
-                print "averaging over each parameter type"
+                print "merging each parameter type"
             ddf_total_sqr_list = self.theta_flat_to_list(self.ddf_total_sqr)
             ddtheta_total_sqr_list = self.theta_flat_to_list(self.ddtheta_total_sqr)
             for dd in ddf_total_sqr_list:
-                dd[:] = np.mean(dd)
+                # dd[:] = np.mean(dd)
+                # dd[:] = np.maximum(dd, np.mean(dd))
+                dd[:] = np.max(dd)
             for dd in ddtheta_total_sqr_list:
-                dd[:] = np.mean(dd)
+                # dd[:] = np.mean(dd)
+                # dd[:] = np.maximum(dd, np.mean(dd))
+                dd[:] = np.max(dd)
             self.ddf_total_sqr = self.theta_list_to_flat(ddf_total_sqr_list)
             self.ddtheta_total_sqr = self.theta_list_to_flat(ddtheta_total_sqr_list)
 
@@ -946,10 +950,15 @@ class SFO(object):
         # scale up the hessian to counteract
         max_ratio = np.max(old_diag_hess/diag_hess)
         min_ratio = np.min(old_diag_hess/diag_hess)
-        # self.min_eig_sub[self.active] *= max_ratio
-        self.last_df /= max_ratio
         max_abs_ratio = np.max([max_ratio, 1./min_ratio])
+
+        # shrink theta towards the current location
         self.last_theta = self.theta_proj + (self.last_theta - self.theta_proj)/max_abs_ratio
+        if self.natgrad_count == 0:
+            self.last_df /= max_ratio
+            if self.display > 5:
+                print "scaling ",
+
         # make sure the mean doesn't shift
         if self.display > 5:
             min_ratio = np.min(old_diag_hess/diag_hess)
@@ -1518,15 +1527,14 @@ class SFO(object):
         # update theta to the new location
         self.theta += dtheta
 
-        # corrupt theta as appropriate
-        noise_vec = np.random.normal(size=(self.M, 1))/np.sqrt(self.M)
-        self.update_subspace(noise_vec)
-        self.theta += noise_vec*self.update_sdev
-
-        self.theta_proj = np.dot(self.P.T, self.theta)
-
-        # self.theta_proj += dtheta_proj
-
+        if self.update_sdev > 0:
+            # corrupt theta as appropriate
+            noise_vec = np.random.normal(size=(self.M, 1))/np.sqrt(self.M)
+            self.update_subspace(noise_vec)
+            self.theta += noise_vec*self.update_sdev
+            self.theta_proj = np.dot(self.P.T, self.theta)
+        else:
+            self.theta_proj += dtheta_proj
 
         # the predicted improvement from this update step
         self.f_predicted_total_improvement = 0.5 * np.dot(dtheta_proj.T, np.dot(full_H_combined, dtheta_proj))
