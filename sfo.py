@@ -111,6 +111,7 @@ class SFO(object):
         self.global_rect = global_rect
 
         self.use_natgrad = use_natgrad
+        self.geometric_average_natgrad = True
 
         # if subspace_momentum == True:
         #     subspace_momentum = int(np.ceil(np.log(self.N)/np.log(2)))
@@ -633,8 +634,13 @@ class SFO(object):
                 new_bfgs_term = True
 
                 if self.use_natgrad:
-                    self.ddf_total_sqr += np.dot(self.P, ddf)**2
-                    self.ddtheta_total_sqr += np.dot(self.P, ddt)**2
+                    if self.geometric_average_natgrad:
+                        mom = 1. / (self.eval_count_total + 1.)
+                        self.ddf_total_sqr     = self.ddf_total_sqr    *(1.-mom) + np.log(np.dot(self.P, ddf)**2 + self.eps)*mom
+                        self.ddtheta_total_sqr = self.ddtheta_total_sqr*(1.-mom) + np.log(np.dot(self.P, ddt)**2 + self.eps)*mom
+                    else:
+                        self.ddf_total_sqr     += np.dot(self.P, ddf)**2
+                        self.ddtheta_total_sqr += np.dot(self.P, ddt)**2
 
         # else:
         #     self.min_eig_sub[indx] = diag_approx
@@ -875,6 +881,7 @@ class SFO(object):
 
     def update_natgrad(self):
 
+        diag_rescale_full = 1./self.nat_grad_rescale
 
         theta_unnat = self.theta/self.nat_grad_rescale
         theta_prior_unnat = self.theta_prior_step/self.nat_grad_rescale
@@ -909,8 +916,15 @@ class SFO(object):
         # self.nat_grad_rescale = np.sqrt(self.total_grad_variance/np.mean(self.total_grad_variance))
         old_diag_hess = self.nat_grad_rescale**2
 
-        diag_hess = np.sqrt(self.ddf_total_sqr / self.ddtheta_total_sqr)
-        diag_hess /= np.mean(diag_hess) # prevent changes in overall scale, only adapt relative scales
+        if self.geometric_average_natgrad:
+            diag_hess = np.sqrt(np.exp(self.ddf_total_sqr - self.ddtheta_total_sqr))
+        else:
+            diag_hess = np.sqrt(self.ddf_total_sqr / self.ddtheta_total_sqr)
+        # prevent changes in overall scale, only adapt relative scales
+        if self.geometric_average_natgrad:
+            diag_hess /= np.exp(np.mean(np.log(diag_hess))) 
+        else:
+            diag_hess /= np.mean(diag_hess)
 
         # # if self.natgrad_count == 0:
         # #     self.nat_grad_rescale = np.sqrt(diag_hess)
@@ -929,7 +943,15 @@ class SFO(object):
         self.theta = theta_unnat*self.nat_grad_rescale
         self.theta_prior_step = theta_prior_unnat*self.nat_grad_rescale
 
+        diag_rescale_full *= self.nat_grad_rescale
+        oldP_scaled = self.P.copy()*diag_rescale_full
+
         self.update_subspace(self.theta)
+
+        PP_proj = np.dot( self.P.T, oldP_scaled )
+        self.last_theta = np.dot(PP_proj, self.last_theta)
+        if self.display > 5:
+            print "approximate last_theta projection"
 
         self.theta_proj = np.dot(self.P.T, self.theta)
 
