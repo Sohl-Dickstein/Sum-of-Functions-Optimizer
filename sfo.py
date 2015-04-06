@@ -31,7 +31,8 @@ class SFO(object):
         subspace_momentum=20,
         global_rect=False,
         simple_hess_init=True,
-        use_natgrad=True):
+        use_natgrad=True,
+        reweight=True):
         """
         The main Sum of Functions Optimizer (SFO) class.
 
@@ -112,6 +113,10 @@ class SFO(object):
 
         self.use_natgrad = use_natgrad
         self.geometric_average_natgrad = True
+        self.reweight = reweight
+
+        if self.reweight:
+            self.subf_weights = np.ones((self.N,1))
 
         # if subspace_momentum == True:
         #     subspace_momentum = int(np.ceil(np.log(self.N)/np.log(2)))
@@ -555,7 +560,14 @@ class SFO(object):
         Get the full approximate Hessian, including the diagonal terms.
         (note that self.full_H is stored without including the diagonal terms)
         """
-        full_H_combined = self.full_H + np.eye(self.K_max)*np.sum(self.min_eig_sub[self.active])
+
+        if self.reweight:
+            bb = self.b * np.sqrt(self.subf_weights.reshape((1,1,-1)))
+            self.full_H = np.real(np.dot(bb.reshape((self.K_max,-1)), bb.reshape((self.K_max,-1)).T))
+            min_eig_sub_scaled = self.min_eig_sub.ravel()*self.subf_weights.ravel()
+            full_H_combined = self.full_H + np.eye(self.K_max)*np.sum(min_eig_sub_scaled[self.active])
+        else:
+            full_H_combined = self.full_H + np.eye(self.K_max)*np.sum(self.min_eig_sub[self.active])
 
         if self.global_rect:
             # rectify the eigenvalues
@@ -722,7 +734,12 @@ class SFO(object):
         H += np.dot(term2, term2.T)
 
         # constrain it to be positive definite
-        U, V = np.linalg.eigh(H)
+        try:
+            U, V = np.linalg.eigh(H)
+        except:
+            if self.display > 3:
+                print("eigh failed, trying eig.")
+            U, V = np.linalg.eig(H)
         if np.max(U) <= 0.:
             # if there aren't any positive eigenvalues, then
             # set them all to be the same conservative diagonal value
@@ -1036,7 +1053,13 @@ class SFO(object):
 
         self.total_grad_variance += df**2
 
+        if self.display > 4:
+            print("||df|| {0},".format(np.sqrt(np.sum(df**2)))),
+
         df = df / self.nat_grad_rescale
+
+        if self.display > 4:
+            print("||df_nat|| {0},".format(np.sqrt(np.sum(df**2)))),
 
         if return_full:
             # only used by check_grad
@@ -1111,9 +1134,10 @@ class SFO(object):
             subfunction_selection = np.random.choice([
                 'distance',
                 'single distance',
-                'fewest evaluations',
+                # 'fewest evaluations',
                 'largest gap',
-                'most positive'
+                'largest gradient',
+                # 'most positive',
                 ])
 
         if self.display > 7:
@@ -1160,6 +1184,13 @@ class SFO(object):
             if indx == -1:
                 # DEBUG
                 1./0
+            return indx
+
+        if subfunction_selection == 'largest gradient':
+            # choose the subfunction whose last gradient was largest
+            gradpow = np.sum(self.last_df**2,axis=0)
+            maxf = np.nanmax(gradpow)
+            indx = np.flatnonzero(gradpow == maxf)[0]
             return indx
 
         if subfunction_selection == 'largest gap':
@@ -1369,6 +1400,38 @@ class SFO(object):
                 self.active[new_gd] = True
 
 
+    def reweight_subfunctions(self):
+
+        # ## reweight by function value
+        # ## observation -- this almost completely stops learning
+        # ## hypothesis -- learning is driven by large gradient minibatches,
+        # ## which are typically not the largest or smallest ones
+        # ## (maybe try ordering around median?)
+        # ff = -self.hist_f[:,0].copy()
+
+        ## reweight by distance since last evaluated
+        ff = np.zeros((self.N,))
+        for i in xrange(self.N):
+            dtheta = self.theta_proj - self.last_theta[:,[i]]
+            bdtheta = np.dot(self.b[:,:,i].T, dtheta)
+            ff[i] = np.sum(bdtheta**2) + np.sum(dtheta**2)*self.min_eig_sub[i]
+
+        ff[~self.active] = np.inf
+
+        reweight_scale = np.sqrt(np.sum(self.active))
+        seq_weight = reweight_scale/(np.arange(self.N)+1)
+        # seq_weight = 1./(np.arange(self.N)+1)
+
+        sortord = np.argsort(ff)
+        self.subf_weights[sortord] = seq_weight.reshape((-1,1))
+
+        self.subf_weights /= np.max(self.subf_weights)
+        self.subf_weights[~self.active] = 1.
+
+        if self.display > 6:
+            print "reweight",
+
+
     def optimization_step(self):
         """
         Perform a single optimization step.  This function is typically called by SFO.optimize().
@@ -1431,6 +1494,12 @@ class SFO(object):
         # # update total Hessian using this subfunction's updated contribution
         # self.full_H += H_new - H_pre_update
 
+
+        ## DEBUG
+        ## also reweight the subfunctions here
+        if self.reweight:
+            self.reweight_subfunctions()
+
         if self.reduced_curvature:
             curvature_scale = np.sum(self.active)/2.
         else:
@@ -1438,12 +1507,15 @@ class SFO(object):
 
         # calculate the total gradient, total Hessian, and total function value at the current location
         full_df = 0.
-        for i in range(self.N):
+        for i in xrange(self.N):
             dtheta = self.theta_proj - self.last_theta[:,[i]]
             bdtheta = np.dot(self.b[:,:,i].T, dtheta)
             Hdtheta = np.real(np.dot(self.b[:,:,i], bdtheta))/curvature_scale
             Hdtheta += dtheta*self.min_eig_sub[i]/curvature_scale # the diagonal contribution
-            full_df += Hdtheta + self.last_df[:,[i]]
+            if self.reweight:
+                full_df += self.subf_weights[i]*(Hdtheta + self.last_df[:,[i]])
+            else:
+                full_df += Hdtheta + self.last_df[:,[i]]
 
         full_H_combined = self.get_full_H_with_diagonal()/curvature_scale
         # TODO - Use Woodbury identity instead of recalculating full inverse
