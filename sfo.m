@@ -1046,7 +1046,9 @@ classdef sfo < handle
             % eigh routine.  (note, eigh further assumes symmetric matrix.  don't
             % think there's an equivalent MATLAB function?)
 
-            [V,U] = eig(A);
+            % Note: this function enforces A to be symmetric
+
+            [V,U] = eig(0.5 * (A + A'));
             U = diag(U);
         end
 
