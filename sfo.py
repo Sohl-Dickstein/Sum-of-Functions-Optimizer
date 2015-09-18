@@ -396,7 +396,7 @@ class SFO(object):
         # initialize it with random noise, so that it still spans K_min
         # dimensions even if not all the subfunctions are active yet
         yy = np.random.randn(self.K_max,self.K_min)
-        if xl == None:
+        if xl is None:
             xl = np.random.randn(self.K_max,1)
         # the most recent position and gradient for all active subfunctions,
         # as well as the current position and gradient (which will not be saved in the history yet)
