@@ -70,7 +70,7 @@ Slightly more documentation can be found in **sfo.m**.
 
 ### Special situations
 
-Email jascha@stanford.edu with questions if you don't find your answer here.
+Email jaschasd@google.com with questions if you don't find your answer here.
 
 #### Reducing overhead
 
