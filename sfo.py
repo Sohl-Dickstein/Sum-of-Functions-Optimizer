@@ -656,8 +656,6 @@ class SFO(object):
         self.b[:,:,indx] = 0.
         self.b[:,:b_p.shape[1],indx] = np.dot(P_hist, b_p)
 
-        return
-
 
     def theta_original_to_list(self, theta_original):
         """
